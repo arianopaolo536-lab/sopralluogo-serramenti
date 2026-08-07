@@ -692,6 +692,7 @@ async function avviaStreamCamera() {
   richiestaCameraAttiva = true;
   statoCamera.textContent = 'Richiesta autorizzazione fotocamera... conferma nel popup del browser.';
   statoCamera.hidden = false;
+  $('#btn-cattura-camera').disabled = true;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment' },
@@ -715,7 +716,10 @@ async function avviaStreamCamera() {
   }
 }
 
-videoCamera.addEventListener('playing', () => { statoCamera.hidden = true; });
+videoCamera.addEventListener('playing', () => {
+  statoCamera.hidden = true;
+  $('#btn-cattura-camera').disabled = false;
+});
 
 function chiudiCamera() {
   richiestaCameraAttiva = false;
@@ -734,7 +738,10 @@ $('#btn-annulla-camera').addEventListener('click', chiudiCamera);
 $('#btn-cattura-camera').addEventListener('click', () => {
   const w = videoCamera.videoWidth;
   const h = videoCamera.videoHeight;
-  if (!w || !h) return;
+  if (!w || !h) {
+    mostraToast('Fotocamera ancora in avvio, attendi un istante e riprova.');
+    return;
+  }
   canvasCamera.width = w;
   canvasCamera.height = h;
   canvasCamera.getContext('2d').drawImage(videoCamera, 0, 0, w, h);
