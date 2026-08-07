@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sopralluogo Serramenti</title>
 <link rel="icon" type="image/png" href="assets/logo-qid.png">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="theme-color" content="#1d6f5c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sopralluogo QID">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -15,6 +21,7 @@
       </span>
       <h1>Sopralluogo Serramenti</h1>
     </div>
+    <span id="badge-offline" class="badge-offline" hidden>⚠ Offline · <span id="conteggio-coda">0</span> in coda</span>
     <button id="btn-nuovo" class="btn btn-primary">+ Nuovo sopralluogo</button>
   </header>
 
@@ -35,6 +42,35 @@
     <section id="view-nuovo" class="view" hidden>
       <h2>Nuovo sopralluogo</h2>
       <form id="form-nuovo" class="card">
+        <div class="gate-modalita">
+          <span class="gate-modalita-titolo">Tipo di attività *</span>
+          <div class="gate-opzioni">
+            <label class="gate-opzione">
+              <input type="radio" name="modalita" value="preventivazione" required>
+              <span class="gate-opzione-corpo">
+                <span class="gate-opzione-lettera">A</span>
+                <strong>Rilievo per preventivazione</strong>
+                <small>Rapido: foto, dettatura, misure indicative</small>
+              </span>
+            </label>
+            <label class="gate-opzione">
+              <input type="radio" name="modalita" value="esecutivo" required>
+              <span class="gate-opzione-corpo">
+                <span class="gate-opzione-lettera">B</span>
+                <strong>Rilievo esecutivo / produzione</strong>
+                <small>Misure confermate, controlli rigorosi</small>
+              </span>
+            </label>
+            <label class="gate-opzione">
+              <input type="radio" name="modalita" value="posa_collaudo" required>
+              <span class="gate-opzione-corpo">
+                <span class="gate-opzione-lettera">C</span>
+                <strong>Verifica posa / collaudo</strong>
+                <small>Controllo finale e verbale</small>
+              </span>
+            </label>
+          </div>
+        </div>
         <label>Nome cantiere / progetto
           <input type="text" name="nome_cantiere" placeholder="Es. Cantiere Via Roma / Condominio Aurora">
         </label>
@@ -78,6 +114,7 @@
         <div class="testata-riga-alto">
           <span class="testata-etichetta">Sopralluogo operativo</span>
           <div class="testata-azioni">
+            <span id="badge-modalita" class="badge-modalita"></span>
             <span id="indicatore-salvataggio" class="badge-salvato">● Salvato</span>
             <button type="button" class="btn btn-secondary" id="btn-stampa">🖨 Stampa tutto</button>
           </div>
@@ -286,6 +323,10 @@
           </div>
           <img id="anteprima-foto" class="anteprima-foto" hidden>
         </label>
+        <!-- Visibile solo dentro l'app nativa iOS, su dispositivi con LiDAR:
+             il JS la mostra via feature-detection, nessun impatto sulla versione browser. -->
+        <button type="button" class="btn btn-secondary" id="btn-misura-lidar" hidden>📐 Misura con LiDAR</button>
+        <p id="nota-misura-lidar" class="vuoto-sottotitolo" hidden></p>
         <div class="azioni">
           <button type="submit" class="btn btn-primary">Salva serramento</button>
         </div>

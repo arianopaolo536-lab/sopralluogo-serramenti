@@ -80,6 +80,16 @@ function mostraToast(msg) {
   mostraToast._t = setTimeout(() => { toast.hidden = true; }, 2600);
 }
 
+// ---------- Modalità operative (gate A/B/C) ----------
+const MODALITA_INFO = {
+  preventivazione: { etichetta: 'Preventivazione', classe: 'modalita-preventivazione' },
+  esecutivo: { etichetta: 'Rilievo esecutivo', classe: 'modalita-esecutivo' },
+  posa_collaudo: { etichetta: 'Posa / collaudo', classe: 'modalita-posa' },
+};
+function infoModalita(m) {
+  return MODALITA_INFO[m] || MODALITA_INFO.preventivazione;
+}
+
 function formattaData(iso) {
   const d = new Date(iso + 'T00:00:00');
   if (isNaN(d)) return iso;
@@ -87,7 +97,22 @@ function formattaData(iso) {
 }
 
 async function api(path, opts = {}) {
-  const res = await fetch(`/api${path}`, opts);
+  const url = `/api${path}`;
+  const metodo = (opts.method || 'GET').toUpperCase();
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } catch (erroreRete) {
+    // Nessuna connessione: per le sole scritture, mettiamo la richiesta in coda
+    // invece di far perdere il dato inserito sul campo.
+    if (metodo !== 'GET') {
+      await accodaRichiestaOffline(url, opts);
+      const errore = new Error('Nessuna connessione: la modifica è stata messa in coda e verrà inviata al ritorno della rete.');
+      errore.offline = true;
+      throw errore;
+    }
+    throw erroreRete;
+  }
   if (!res.ok) {
     let msg = 'Errore di rete';
     try { msg = (await res.json()).error || msg; } catch {}
@@ -115,6 +140,130 @@ function mergeProfondo(a, b) {
   return risultato;
 }
 
+// ---------- Offline / coda di sincronizzazione (IndexedDB) ----------
+// Le scritture (PATCH/POST/DELETE) fatte senza connessione vengono salvate qui
+// e reinviate automaticamente al ritorno della rete, così non si perde mai un
+// dato inserito sul campo. Le sole letture (GET) restano gestite dal service
+// worker (cache di riserva), non da questa coda.
+const NOME_DB_OFFLINE = 'sopralluogo-offline';
+const NOME_STORE_CODA = 'coda';
+
+function apriDbOffline() {
+  return new Promise((resolve, reject) => {
+    const richiesta = indexedDB.open(NOME_DB_OFFLINE, 1);
+    richiesta.onupgradeneeded = () => {
+      richiesta.result.createObjectStore(NOME_STORE_CODA, { keyPath: 'id', autoIncrement: true });
+    };
+    richiesta.onsuccess = () => resolve(richiesta.result);
+    richiesta.onerror = () => reject(richiesta.error);
+  });
+}
+
+async function accodaRichiestaOffline(url, opts) {
+  const db = await apriDbOffline();
+  let corpo;
+  if (opts.body instanceof FormData) {
+    corpo = { tipo: 'formdata', campi: [...opts.body.entries()] };
+  } else if (typeof opts.body === 'string') {
+    corpo = { tipo: 'json', testo: opts.body };
+  } else {
+    corpo = { tipo: 'vuoto' };
+  }
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(NOME_STORE_CODA, 'readwrite');
+    tx.objectStore(NOME_STORE_CODA).add({
+      url, metodo: opts.method || 'POST', corpo, timestamp: new Date().toISOString(),
+    });
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+  aggiornaBadgeOffline();
+}
+
+async function leggiCodaOffline() {
+  const db = await apriDbOffline();
+  return new Promise((resolve, reject) => {
+    const richiesta = db.transaction(NOME_STORE_CODA, 'readonly').objectStore(NOME_STORE_CODA).getAll();
+    richiesta.onsuccess = () => resolve(richiesta.result);
+    richiesta.onerror = () => reject(richiesta.error);
+  });
+}
+
+async function rimuoviDallaCodaOffline(id) {
+  const db = await apriDbOffline();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(NOME_STORE_CODA, 'readwrite');
+    tx.objectStore(NOME_STORE_CODA).delete(id);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function aggiornaBadgeOffline() {
+  const badge = $('#badge-offline');
+  let numero = 0;
+  try { numero = (await leggiCodaOffline()).length; } catch {}
+  const offline = !navigator.onLine;
+  badge.hidden = !offline && numero === 0;
+  $('#conteggio-coda').textContent = numero;
+  badge.textContent = offline
+    ? `⚠ Offline · ${numero} in coda`
+    : `⏳ Sincronizzazione · ${numero} in coda`;
+}
+
+let sincronizzazioneInCorso = false;
+async function sincronizzaCodaOffline() {
+  if (sincronizzazioneInCorso || !navigator.onLine) return;
+  sincronizzazioneInCorso = true;
+  try {
+    const coda = await leggiCodaOffline();
+    if (coda.length === 0) return;
+    let inviateConSuccesso = 0;
+    for (const voce of coda.sort((a, b) => a.id - b.id)) {
+      let opts = { method: voce.metodo };
+      if (voce.corpo.tipo === 'formdata') {
+        const fd = new FormData();
+        for (const [chiave, valore] of voce.corpo.campi) fd.append(chiave, valore);
+        opts.body = fd;
+      } else if (voce.corpo.tipo === 'json') {
+        opts.body = voce.corpo.testo;
+        opts.headers = { 'Content-Type': 'application/json' };
+      }
+      let rispostaServer;
+      try {
+        rispostaServer = await fetch(voce.url, opts);
+      } catch {
+        break; // errore di rete: la connessione è di nuovo assente, riproveremo al prossimo evento online
+      }
+      // Risposta ricevuta dal server (anche di errore): la richiesta non è più "in coda per la rete",
+      // quindi la togliamo comunque per non bloccare le successive con una richiesta ormai non valida
+      // (es. modifica di una scheda creata offline che nel frattempo ha cambiato id).
+      await rimuoviDallaCodaOffline(voce.id);
+      if (rispostaServer.ok || rispostaServer.status === 204) inviateConSuccesso++;
+    }
+    if (inviateConSuccesso > 0) {
+      mostraToast(`Sincronizzate ${inviateConSuccesso} modifiche in sospeso`);
+      if (sopralluogoCorrenteId) await ricaricaSopralluogoCorrente();
+      await caricaElenco();
+    }
+  } finally {
+    sincronizzazioneInCorso = false;
+    aggiornaBadgeOffline();
+  }
+}
+
+window.addEventListener('online', sincronizzaCodaOffline);
+window.addEventListener('offline', aggiornaBadgeOffline);
+$('#badge-offline').addEventListener('click', sincronizzaCodaOffline);
+aggiornaBadgeOffline();
+sincronizzaCodaOffline();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+
 // ---------- Elenco sopralluoghi ----------
 async function caricaElenco() {
   const lista = $('#lista-sopralluoghi');
@@ -127,12 +276,16 @@ async function caricaElenco() {
       const el = document.createElement('div');
       el.className = 'item-sopralluogo';
       const titoloVisivo = s.titolo || s.nome_cantiere || s.cliente_nome;
+      const im = infoModalita(s.modalita);
       el.innerHTML = `
         <div class="riga-titolo">
           <span>${escapeHtml(titoloVisivo)}</span>
           <span>${formattaData(s.data_sopralluogo)}</span>
         </div>
-        <div class="meta">${escapeHtml(s.cliente_nome)} · ${escapeHtml(s.indirizzo)} · ${s.num_serramenti} serrament${s.num_serramenti === 1 ? 'o' : 'i'}</div>
+        <div class="meta">
+          <span class="badge-modalita ${im.classe}">${im.etichetta}</span>
+          ${escapeHtml(s.cliente_nome)} · ${escapeHtml(s.indirizzo)} · ${s.num_serramenti} serrament${s.num_serramenti === 1 ? 'o' : 'i'}
+        </div>
       `;
       el.addEventListener('click', () => apriDettaglio(s.id));
       lista.appendChild(el);
@@ -164,7 +317,15 @@ $('#form-nuovo').addEventListener('submit', async (e) => {
     mostraToast('Sopralluogo creato');
     apriDettaglio(creato.id);
   } catch (e) {
-    mostraToast(e.message);
+    if (e.offline) {
+      // La creazione di un NUOVO sopralluogo richiede un ID assegnato dal server:
+      // a differenza delle modifiche a un sopralluogo già aperto, qui non possiamo
+      // procedere in locale. Il modo corretto di lavorare offline è aprire (o creare)
+      // il sopralluogo quando c'è rete, poi proseguire il rilievo anche senza campo.
+      mostraToast('Nessuna connessione: per creare un nuovo sopralluogo serve la rete almeno un istante.');
+    } else {
+      mostraToast(e.message);
+    }
   }
 });
 
@@ -196,6 +357,10 @@ async function caricaDettaglio() {
     const s = sopralluogoCorrente;
     $('#campo-titolo').value = s.titolo || `${s.cliente_nome} - ${s.indirizzo}`;
     ridimensionaTitolo();
+    const im = infoModalita(s.modalita);
+    const badgeModalita = $('#badge-modalita');
+    badgeModalita.textContent = im.etichetta;
+    badgeModalita.className = `badge-modalita ${im.classe}`;
     $('#campo-data').value = s.data_sopralluogo || '';
     $('#campo-rilevatori').value = s.rilevatori || '';
     $('#campo-note-generali').value = (s.dati_generali && s.dati_generali.note_generali) || '';
@@ -229,6 +394,12 @@ function impostaIndicatoreSalvato() {
   el.classList.remove('salvataggio');
 }
 
+function impostaIndicatoreOffline() {
+  const el = $('#indicatore-salvataggio');
+  el.textContent = '● In coda (offline)';
+  el.classList.add('salvataggio');
+}
+
 function segnaSalvataggio(parziale) {
   salvataggioPendente = mergeProfondo(salvataggioPendente, parziale);
   const el = $('#indicatore-salvataggio');
@@ -247,7 +418,13 @@ function segnaSalvataggio(parziale) {
       sopralluogoCorrente = aggiornato;
       impostaIndicatoreSalvato();
     } catch (e) {
-      mostraToast('Errore salvataggio: ' + e.message);
+      if (e.offline) {
+        // Il campo resta visibile con il valore digitato (non viene sovrascritto):
+        // la modifica è in coda e partirà da sola al ritorno della rete.
+        impostaIndicatoreOffline();
+      } else {
+        mostraToast('Errore salvataggio: ' + e.message);
+      }
     }
   }, 700);
 }
@@ -352,7 +529,7 @@ function fotoItemHtml(sezioneId, foto, indice) {
     <div class="foto-item">
       <img src="${foto.path}" alt="Foto ${indice + 1}">
       <div class="foto-item-azioni">
-        <span>Foto ${indice + 1}</span>
+        <span>Foto ${indice + 1}${foto.inCoda ? ' · in coda' : ''}</span>
         <button type="button" class="btn-elimina-foto-sezione" data-sezione="${sezioneId}" data-foto="${foto.id}">Elimina</button>
       </div>
     </div>
@@ -407,18 +584,51 @@ async function caricaFotoSezione(sezioneId, file) {
     renderSezioni();
     mostraToast('Foto aggiunta');
   } catch (e) {
-    mostraToast('Errore: ' + e.message);
+    if (e.offline) {
+      // Mostra subito l'anteprima locale: la foto è in coda, verrà caricata sul
+      // server al ritorno della rete e sostituita automaticamente con quella reale.
+      const sez = sezione(sopralluogoCorrente, sezioneId);
+      sez.foto.push({ id: `tmp_${Date.now()}`, path: URL.createObjectURL(file), inCoda: true });
+      renderSezioni();
+      mostraToast('Foto salvata offline, verrà caricata alla riconnessione');
+    } else {
+      mostraToast('Errore: ' + e.message);
+    }
   }
 }
 
+// Replica lato client dell'helper di db.js: garantisce che la sezione esista
+// anche quando si aggiunge una foto in modalità offline (nessuna scrittura server).
+function sezione(sopralluogo, sezioneId) {
+  if (!sopralluogo.dati_generali) sopralluogo.dati_generali = { note_generali: '', dati_fabbricato: '', sezioni: {} };
+  if (!sopralluogo.dati_generali.sezioni[sezioneId]) {
+    sopralluogo.dati_generali.sezioni[sezioneId] = { campi: {}, foto: [] };
+  }
+  return sopralluogo.dati_generali.sezioni[sezioneId];
+}
+
 async function eliminaFotoSezione(sezioneId, fotoId) {
+  if (String(fotoId).startsWith('tmp_')) {
+    // Foto ancora in coda (mai arrivata al server): la rimuoviamo solo in locale.
+    const sez = sezione(sopralluogoCorrente, sezioneId);
+    sez.foto = sez.foto.filter(f => String(f.id) !== String(fotoId));
+    renderSezioni();
+    return;
+  }
   try {
     await api(`/sopralluoghi/${sopralluogoCorrenteId}/sezioni/${sezioneId}/foto/${fotoId}`, { method: 'DELETE' });
     const s = await api(`/sopralluoghi/${sopralluogoCorrenteId}`);
     sopralluogoCorrente = s;
     renderSezioni();
   } catch (e) {
-    mostraToast('Errore: ' + e.message);
+    if (e.offline) {
+      const sez = sezione(sopralluogoCorrente, sezioneId);
+      sez.foto = sez.foto.filter(f => String(f.id) !== String(fotoId));
+      renderSezioni();
+      mostraToast('Eliminazione in coda (offline)');
+    } else {
+      mostraToast('Errore: ' + e.message);
+    }
   }
 }
 
@@ -542,18 +752,43 @@ function renderRilievoMisure(filtro = '') {
           w.cassonetto ? 'cassonetto' : null,
         ].filter(Boolean).join(' · ')}</div>
         ${w.stato ? `<span class="stato-badge">${escapeHtml(w.stato)}</span>` : ''}
+        ${w.inCoda ? '<span class="stato-badge badge-in-coda">⏳ in coda offline</span>' : ''}
         <div><button class="btn btn-danger" data-id="${w.id}">Elimina</button></div>
       </div>
     `;
     el.addEventListener('click', (ev) => {
       if (ev.target.closest('.btn-danger')) return;
+      if (w.inCoda) {
+        mostraToast('In coda offline: attendi la sincronizzazione prima di modificarlo.');
+        return;
+      }
       apriModaleSerramento(w);
     });
     el.querySelector('.btn-danger').addEventListener('click', async (ev) => {
       ev.stopPropagation();
       if (!confirm('Eliminare questo serramento?')) return;
-      await api(`/serramenti/${w.id}`, { method: 'DELETE' });
-      await ricaricaSopralluogoCorrente();
+      if (String(w.id).startsWith('tmp_')) {
+        // Mai arrivato al server: lo togliamo solo in locale.
+        sopralluogoCorrente.serramenti = sopralluogoCorrente.serramenti.filter(x => x.id !== w.id);
+        renderRilievoMisure();
+        renderTabellaRiepilogo();
+        aggiornaStatistiche();
+        return;
+      }
+      try {
+        await api(`/serramenti/${w.id}`, { method: 'DELETE' });
+        await ricaricaSopralluogoCorrente();
+      } catch (err) {
+        if (err.offline) {
+          sopralluogoCorrente.serramenti = sopralluogoCorrente.serramenti.filter(x => x.id !== w.id);
+          renderRilievoMisure();
+          renderTabellaRiepilogo();
+          aggiornaStatistiche();
+          mostraToast('Eliminazione in coda (offline)');
+        } else {
+          mostraToast('Errore: ' + err.message);
+        }
+      }
     });
     lista.appendChild(el);
   }
@@ -570,6 +805,8 @@ function chiudiModaleSerramento() {
 
 function apriModaleSerramento(w) {
   serramentoInModifica = w ? w.id : null;
+  risultatoLidarCorrente = null;
+  $('#nota-misura-lidar').hidden = true;
   const form = $('#form-serramento');
   form.reset();
   $('#anteprima-foto').hidden = true;
@@ -587,11 +824,25 @@ function apriModaleSerramento(w) {
   $('#modale-serramento').hidden = false;
 }
 
+function serramentoOttimisticoDaForm(fd) {
+  const w = Object.fromEntries(fd.entries());
+  delete w.foto;
+  for (const c of ['larghezza_cm', 'altezza_cm', 'spessore_muro_cm']) w[c] = w[c] ? Number(w[c]) : null;
+  w.cassonetto = w.cassonetto === 'true';
+  return w;
+}
+
 $('#form-serramento').addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.target;
   const fd = new FormData(form);
   fd.set('cassonetto', form.elements['cassonetto'].checked ? 'true' : 'false');
+  if (risultatoLidarCorrente) {
+    fd.set('metodo_misurazione', risultatoLidarCorrente.metodoMisura || 'ar_lidar');
+    fd.set('dispositivo_misurazione', risultatoLidarCorrente.dispositivo || '');
+    fd.set('attendibilita', risultatoLidarCorrente.attendibilita || 'media');
+    fd.set('misura_confermata', 'true');
+  }
   try {
     if (serramentoInModifica) {
       await api(`/serramenti/${serramentoInModifica}`, { method: 'PATCH', body: fd });
@@ -603,7 +854,26 @@ $('#form-serramento').addEventListener('submit', async (e) => {
     chiudiModaleSerramento();
     await ricaricaSopralluogoCorrente();
   } catch (err) {
-    mostraToast(err.message);
+    if (err.offline) {
+      const campi = serramentoOttimisticoDaForm(fd);
+      if (!sopralluogoCorrente.serramenti) sopralluogoCorrente.serramenti = [];
+      if (serramentoInModifica) {
+        const w = sopralluogoCorrente.serramenti.find(x => x.id === serramentoInModifica);
+        if (w) Object.assign(w, campi);
+      } else {
+        sopralluogoCorrente.serramenti.push({
+          id: `tmp_${Date.now()}`, sopralluogo_id: sopralluogoCorrenteId,
+          foto_path: null, inCoda: true, ...campi,
+        });
+      }
+      chiudiModaleSerramento();
+      renderRilievoMisure();
+      renderTabellaRiepilogo();
+      aggiornaStatistiche();
+      mostraToast('Serramento salvato offline, verrà sincronizzato alla riconnessione');
+    } else {
+      mostraToast(err.message);
+    }
   }
 });
 
@@ -624,6 +894,56 @@ function renderTabellaRiepilogo() {
     </tr>
   `).join('');
 }
+
+// ---------- Misura con LiDAR (solo dentro l'app nativa iOS con MisuraLidarPlugin) ----------
+// Questo blocco non ha alcun effetto sulla versione browser: se window.Capacitor
+// o il plugin non esistono (cioè si sta usando il sito da Safari/Chrome), il
+// pulsante resta nascosto e nient'altro cambia. Vedi docs/ARCHITETTURA-FASE2.md.
+let risultatoLidarCorrente = null;
+
+async function pluginLidarDisponibile() {
+  const plugin = window.Capacitor?.Plugins?.MisuraLidar;
+  if (!window.Capacitor?.isNativePlatform?.() || !plugin) return false;
+  try {
+    const r = await plugin.disponibile();
+    return !!r.disponibile;
+  } catch {
+    return false;
+  }
+}
+
+(async () => {
+  if (await pluginLidarDisponibile()) {
+    $('#btn-misura-lidar').hidden = false;
+  }
+})();
+
+$('#btn-misura-lidar').addEventListener('click', async () => {
+  const plugin = window.Capacitor?.Plugins?.MisuraLidar;
+  if (!plugin) return;
+  const bottone = $('#btn-misura-lidar');
+  bottone.disabled = true;
+  try {
+    const risultato = await plugin.misura();
+    // Visibile in Safari Web Inspector (collega l'iPhone al Mac) per confrontare
+    // i 4 punti (profondità/confidenza/metodo) durante i test sul campo.
+    console.log('Misura LiDAR ricevuta:', risultato);
+    risultatoLidarCorrente = risultato;
+    const form = $('#form-serramento');
+    form.elements['larghezza_cm'].value = risultato.larghezza;
+    form.elements['altezza_cm'].value = risultato.altezza;
+    const nota = $('#nota-misura-lidar');
+    nota.hidden = false;
+    nota.textContent =
+      `📐 Misura LiDAR — ${risultato.dispositivo} · attendibilità ${risultato.attendibilita} · ` +
+      `MISURA INDICATIVA — verifica prima di salvare.`;
+    mostraToast('Misura LiDAR acquisita, verifica i valori prima di salvare');
+  } catch (e) {
+    mostraToast('Misura LiDAR non riuscita: ' + e.message);
+  } finally {
+    bottone.disabled = false;
+  }
+});
 
 // ---------- Fotocamera (riusabile) ----------
 const inputFoto = $('#input-foto');

@@ -10,7 +10,12 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@capacitor/core": "^8.5.0",
     "express": "^4.19.2",
     "multer": "^1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/ios": "^8.5.0"
   }
 }

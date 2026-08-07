@@ -1,0 +1,12 @@
+{
+  "appId": "it.qid.sopralluogoserramenti",
+  "appName": "Sopralluogo Serramenti",
+  "webDir": "public",
+  "backgroundColor": "#eef6f1",
+  "ios": {
+    "contentInset": "always"
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

@@ -50,11 +50,14 @@ app.get('/api/sopralluoghi/:id', (req, res) => {
 });
 
 app.post('/api/sopralluoghi', (req, res) => {
-  const { titolo, nome_cantiere, cliente_nome, indirizzo, telefono, email, rilevatori, data_sopralluogo, note, pellicola_percento } = req.body;
+  const { modalita, titolo, nome_cantiere, cliente_nome, indirizzo, telefono, email, rilevatori, data_sopralluogo, note, pellicola_percento } = req.body;
   if (!cliente_nome || !indirizzo || !data_sopralluogo) {
     return res.status(400).json({ error: 'cliente_nome, indirizzo e data_sopralluogo sono obbligatori' });
   }
-  const creato = db.createSopralluogo({ titolo, nome_cantiere, cliente_nome, indirizzo, telefono, email, rilevatori, data_sopralluogo, note, pellicola_percento });
+  if (!db.MODALITA_VALIDE.includes(modalita)) {
+    return res.status(400).json({ error: `modalita obbligatoria: una tra ${db.MODALITA_VALIDE.join(', ')}` });
+  }
+  const creato = db.createSopralluogo({ modalita, titolo, nome_cantiere, cliente_nome, indirizzo, telefono, email, rilevatori, data_sopralluogo, note, pellicola_percento });
   res.status(201).json(creato);
 });
 

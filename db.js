@@ -11,6 +11,26 @@ function datiGeneraliVuoti() {
   };
 }
 
+// Modalità operative del sopralluogo (gate iniziale).
+const MODALITA_VALIDE = ['preventivazione', 'esecutivo', 'posa_collaudo'];
+
+// Normalizza record letti da versioni precedenti del database (senza "modalita").
+function normalizzaSopralluogo(s) {
+  if (s && !s.modalita) s.modalita = 'preventivazione';
+  return s;
+}
+
+// Normalizza serramenti creati prima dell'introduzione dei campi di rilievo assistito.
+function normalizzaSerramento(w) {
+  if (!w) return w;
+  if (w.metodo_misurazione === undefined) w.metodo_misurazione = 'manuale';
+  if (w.attendibilita === undefined) w.attendibilita = 'alta';
+  if (w.dispositivo_misurazione === undefined) w.dispositivo_misurazione = null;
+  if (w.misura_confermata === undefined) w.misura_confermata = true;
+  if (!Array.isArray(w.storico_misure)) w.storico_misure = [];
+  return w;
+}
+
 function creaDb(dataDir) {
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
   const dbPath = path.join(dataDir, 'db.json');
@@ -45,16 +65,19 @@ function creaDb(dataDir) {
       return [...stato.sopralluoghi]
         .sort((a, b) => (b.data_sopralluogo || '').localeCompare(a.data_sopralluogo || '') || b.id - a.id)
         .map(s => ({
-          ...s,
+          ...normalizzaSopralluogo(s),
           num_serramenti: stato.serramenti.filter(w => w.sopralluogo_id === s.id).length,
         }));
     },
     getSopralluogo(id) {
-      return stato.sopralluoghi.find(s => s.id === Number(id)) || null;
+      const s = stato.sopralluoghi.find(s => s.id === Number(id)) || null;
+      return normalizzaSopralluogo(s);
     },
+    MODALITA_VALIDE,
     createSopralluogo(data) {
       const nuovo = {
         id: stato.nextSopralluogoId++,
+        modalita: MODALITA_VALIDE.includes(data.modalita) ? data.modalita : 'preventivazione',
         titolo: data.titolo || null,
         nome_cantiere: data.nome_cantiere || null,
         cliente_nome: data.cliente_nome,
@@ -76,6 +99,9 @@ function creaDb(dataDir) {
     updateSopralluogo(id, data) {
       const s = this.getSopralluogo(id);
       if (!s) return null;
+      if (data.modalita !== undefined && MODALITA_VALIDE.includes(data.modalita)) {
+        s.modalita = data.modalita;
+      }
       const campiConsentiti = ['titolo', 'nome_cantiere', 'cliente_nome', 'indirizzo', 'telefono', 'email', 'rilevatori', 'data_sopralluogo', 'note', 'pellicola_percento'];
       for (const campo of campiConsentiti) {
         if (Object.prototype.hasOwnProperty.call(data, campo) && data[campo] !== undefined) {
@@ -132,10 +158,11 @@ function creaDb(dataDir) {
     listSerramenti(sopralluogoId) {
       return stato.serramenti
         .filter(w => w.sopralluogo_id === Number(sopralluogoId))
-        .sort((a, b) => a.id - b.id);
+        .sort((a, b) => a.id - b.id)
+        .map(normalizzaSerramento);
     },
     getSerramento(id) {
-      return stato.serramenti.find(w => w.id === Number(id)) || null;
+      return normalizzaSerramento(stato.serramenti.find(w => w.id === Number(id)) || null);
     },
     createSerramento(sopralluogoId, data) {
       const nuovo = {
@@ -155,28 +182,55 @@ function creaDb(dataDir) {
         stato: data.stato || null,
         note: data.note || null,
         foto_path: data.foto_path || null,
+        // --- Predisposizione per rilievo assistito (foto-riferimento, AR/LiDAR, AI) ---
+        // Non ancora popolati dall'interfaccia attuale (inserimento manuale = 'manuale' /
+        // 'alta' attendibilità / già confermato), ma il modello dati è già pronto per le
+        // fasi successive (misura assistita, AR/LiDAR, riconoscimento AI) senza migrazioni.
+        metodo_misurazione: data.metodo_misurazione || 'manuale',
+        attendibilita: data.attendibilita || 'alta',
+        dispositivo_misurazione: data.dispositivo_misurazione || null,
+        misura_confermata: data.misura_confermata !== undefined
+          ? (data.misura_confermata === true || data.misura_confermata === 'true')
+          : true,
+        storico_misure: [],
         created_at: new Date().toISOString(),
       };
       stato.serramenti.push(nuovo);
       salva();
       return nuovo;
     },
-    updateSerramento(id, data) {
+    updateSerramento(id, data, operatore) {
       const w = this.getSerramento(id);
       if (!w) return null;
-      const campiTesto = ['codice', 'piano', 'interno', 'ambiente', 'tipo', 'tipo_apertura', 'materiale_attuale', 'stato', 'note'];
+      const campiTesto = ['codice', 'piano', 'interno', 'ambiente', 'tipo', 'tipo_apertura', 'materiale_attuale', 'stato', 'note', 'metodo_misurazione', 'attendibilita', 'dispositivo_misurazione'];
       for (const campo of campiTesto) {
         if (Object.prototype.hasOwnProperty.call(data, campo) && data[campo] !== undefined) {
           w[campo] = data[campo] || null;
         }
       }
+      // Traccia in uno storico le correzioni di larghezza/altezza (punto 17: tracciabilità).
+      if (!Array.isArray(w.storico_misure)) w.storico_misure = [];
       for (const campo of ['larghezza_cm', 'altezza_cm', 'spessore_muro_cm']) {
         if (Object.prototype.hasOwnProperty.call(data, campo) && data[campo] !== undefined) {
-          w[campo] = data[campo] ? Number(data[campo]) : null;
+          const nuovoValore = data[campo] ? Number(data[campo]) : null;
+          if ((campo === 'larghezza_cm' || campo === 'altezza_cm') && nuovoValore !== w[campo]) {
+            w.storico_misure.push({
+              campo,
+              valore_precedente: w[campo],
+              valore_nuovo: nuovoValore,
+              tipo: 'manuale',
+              operatore: operatore || null,
+              timestamp: new Date().toISOString(),
+            });
+          }
+          w[campo] = nuovoValore;
         }
       }
       if (Object.prototype.hasOwnProperty.call(data, 'cassonetto')) {
         w.cassonetto = data.cassonetto === true || data.cassonetto === 'true' || data.cassonetto === 'on';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'misura_confermata')) {
+        w.misura_confermata = data.misura_confermata === true || data.misura_confermata === 'true';
       }
       if (data.foto_path) w.foto_path = data.foto_path;
       salva();

@@ -56,6 +56,23 @@ body {
   margin: 0;
 }
 
+.badge-in-coda {
+  background: rgba(192,140,20,.16) !important;
+  color: #8a6d1f !important;
+  margin-left: 6px;
+}
+
+.badge-offline {
+  background: rgba(192,57,43,.85);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  font-size: .8rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
 .app-header-brand {
   display: flex;
   align-items: center;
@@ -156,6 +173,82 @@ main {
 }
 
 form.card { display: flex; flex-direction: column; gap: 12px; }
+
+/* ===== Gate iniziale: tipo di attività (A/B/C) ===== */
+.gate-modalita { display: flex; flex-direction: column; gap: 8px; }
+.gate-modalita-titolo {
+  font-size: .82rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.gate-opzioni {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+@media (max-width: 620px) {
+  .gate-opzioni { grid-template-columns: 1fr; }
+}
+.gate-opzione { display: block; cursor: pointer; }
+.gate-opzione input { position: absolute; opacity: 0; pointer-events: none; }
+.gate-opzione-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(255,255,255,.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 12px;
+  height: 100%;
+  transition: border-color .15s ease, background .15s ease;
+}
+.gate-opzione-corpo strong { font-size: .92rem; }
+.gate-opzione-corpo small { color: var(--muted); font-size: .78rem; }
+.gate-opzione-lettera {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(29,111,92,.12);
+  color: var(--primary-dark);
+  font-weight: 700;
+  font-size: .82rem;
+  margin-bottom: 4px;
+}
+.gate-opzione input:checked + .gate-opzione-corpo {
+  border-color: var(--primary);
+  background: rgba(29,111,92,.1);
+}
+.gate-opzione input:checked + .gate-opzione-corpo .gate-opzione-lettera {
+  background: var(--primary);
+  color: #fff;
+}
+.gate-opzione input:focus-visible + .gate-opzione-corpo {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* ===== Badge modalità ===== */
+.badge-modalita {
+  display: inline-block;
+  font-size: .72rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+  vertical-align: middle;
+}
+.item-sopralluogo .badge-modalita { margin-right: 6px; }
+.modalita-preventivazione { background: rgba(59,130,180,.14); color: #2b6a8a; }
+.modalita-esecutivo { background: rgba(29,111,92,.14); color: var(--primary-dark); }
+.modalita-posa { background: rgba(192,57,43,.14); color: var(--danger); }
 
 label {
   display: flex;
