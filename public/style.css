@@ -57,14 +57,21 @@ body {
 .app-header-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
-.icona-serramento {
-  width: 30px;
-  height: 30px;
-  color: #fff;
+.badge-logo-qid {
   flex-shrink: 0;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,.2));
+  display: flex;
+  align-items: center;
+  background: rgba(255,255,255,.92);
+  border-radius: 10px;
+  padding: 5px 8px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.18);
+}
+.logo-qid {
+  height: 24px;
+  width: auto;
+  display: block;
 }
 
 main {
