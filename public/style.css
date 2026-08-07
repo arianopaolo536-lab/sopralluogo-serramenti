@@ -260,6 +260,9 @@ input, select, textarea {
   background: rgba(0, 0, 0, .55);
   font-size: .95rem;
 }
+.stato-camera[hidden] {
+  display: none;
+}
 .modale-azioni {
   display: flex;
   gap: 8px;
