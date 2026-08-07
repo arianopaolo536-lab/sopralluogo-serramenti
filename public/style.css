@@ -20,16 +20,18 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   min-height: 100vh;
-  /* Sfondo "a serramento": leggera griglia che richiama i profili di un infisso,
-     con due aloni di colore ispirati al verde/rosso del brand. */
-  background-color: #eef6f1;
+  /* Sfondo "a serramento": illustrazione architettonica di infissi molto tenue,
+     con due aloni di colore ispirati al verde/rosso del brand sopra. */
+  background-color: #f7f8f6;
   background-image:
-    repeating-linear-gradient(0deg, rgba(29,111,92,.05) 0px, rgba(29,111,92,.05) 1px, transparent 1px, transparent 110px),
-    repeating-linear-gradient(90deg, rgba(29,111,92,.05) 0px, rgba(29,111,92,.05) 1px, transparent 1px, transparent 110px),
-    radial-gradient(circle at 12% 8%, rgba(29,111,92,.16), transparent 42%),
-    radial-gradient(circle at 92% 12%, rgba(192,57,43,.12), transparent 38%),
-    linear-gradient(160deg, #eef6f1 0%, #f5f6f4 45%, #fdf1ee 100%);
-  background-attachment: fixed, fixed, fixed, fixed, fixed;
+    radial-gradient(circle at 12% 8%, rgba(29,111,92,.14), transparent 42%),
+    radial-gradient(circle at 92% 12%, rgba(192,57,43,.10), transparent 38%),
+    linear-gradient(160deg, rgba(238,246,241,.9) 0%, rgba(245,246,244,.85) 45%, rgba(253,241,238,.9) 100%),
+    url('assets/sfondo-serramenti.jpg');
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
+  background-size: cover, cover, cover, cover;
+  background-position: center, center, center, center;
+  background-attachment: fixed, fixed, fixed, fixed;
 }
 
 .app-header {
@@ -630,7 +632,11 @@ input:focus, select:focus, textarea:focus {
 .campo-ricerca { margin-bottom: 14px; }
 
 .stato-vuoto {
-  background: rgba(255,255,255,.4);
+  background:
+    linear-gradient(rgba(255,255,255,.72), rgba(255,255,255,.72)),
+    url('assets/finestra-dettaglio.jpg');
+  background-size: cover;
+  background-position: center;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border: 2px dashed rgba(29,111,92,.3);
@@ -667,7 +673,11 @@ input:focus, select:focus, textarea:focus {
 .modale-form-header {
   position: sticky;
   top: 0;
-  background: rgba(255,255,255,.75);
+  background:
+    linear-gradient(rgba(255,255,255,.82), rgba(255,255,255,.82)),
+    url('assets/finestra-dettaglio.jpg');
+  background-size: cover;
+  background-position: center 25%;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   display: flex;
