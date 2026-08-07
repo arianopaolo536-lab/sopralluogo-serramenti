@@ -148,14 +148,29 @@
   <!-- Modale fotocamera -->
   <div id="modale-camera" class="modale" hidden>
     <div class="modale-contenuto">
-      <div class="video-wrap">
-        <video id="video-camera" autoplay playsinline></video>
-        <p id="stato-camera" class="stato-camera" hidden>Richiesta autorizzazione fotocamera...</p>
+
+      <!-- Schermata di accoglienza: mostrata prima di chiedere il permesso -->
+      <div id="schermata-intro-camera" class="schermata-intro">
+        <p>📷</p>
+        <p>Stai per attivare la fotocamera del dispositivo per scattare una foto del serramento.</p>
+        <p class="schermata-intro-nota">Il browser potrebbe chiederti di confermare il permesso.</p>
+        <div class="modale-azioni">
+          <button type="button" class="btn btn-secondary" id="btn-annulla-intro-camera">Annulla</button>
+          <button type="button" class="btn btn-primary" id="btn-attiva-camera">Attiva fotocamera</button>
+        </div>
       </div>
-      <canvas id="canvas-camera" hidden></canvas>
-      <div class="modale-azioni">
-        <button type="button" class="btn btn-secondary" id="btn-annulla-camera">Annulla</button>
-        <button type="button" class="btn btn-primary" id="btn-cattura-camera">Scatta</button>
+
+      <!-- Vista fotocamera: video in diretta + scatto -->
+      <div id="vista-camera" hidden>
+        <div class="video-wrap">
+          <video id="video-camera" autoplay playsinline></video>
+          <p id="stato-camera" class="stato-camera" hidden>Richiesta autorizzazione fotocamera...</p>
+        </div>
+        <canvas id="canvas-camera" hidden></canvas>
+        <div class="modale-azioni">
+          <button type="button" class="btn btn-secondary" id="btn-annulla-camera">Annulla</button>
+          <button type="button" class="btn btn-primary" id="btn-cattura-camera">Scatta</button>
+        </div>
       </div>
     </div>
   </div>

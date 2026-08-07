@@ -270,3 +270,18 @@ input, select, textarea {
   background: #111;
 }
 .modale-azioni .btn { flex: 1; }
+
+.schermata-intro {
+  padding: 32px 24px 12px;
+  color: #fff;
+  text-align: center;
+  background: #111;
+}
+.schermata-intro p:first-child {
+  font-size: 2.5rem;
+  margin: 0 0 12px;
+}
+.schermata-intro-nota {
+  color: #aaa;
+  font-size: .85rem;
+}

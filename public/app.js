@@ -265,18 +265,38 @@ inputFoto.addEventListener('change', () => {
 });
 
 const statoCamera = $('#stato-camera');
+const schermataIntroCamera = $('#schermata-intro-camera');
+const vistaCamera = $('#vista-camera');
 let richiestaCameraAttiva = false;
 
-$('#btn-scatta-foto').addEventListener('click', async () => {
+function resetModaleCamera() {
+  schermataIntroCamera.hidden = false;
+  vistaCamera.hidden = true;
+  statoCamera.hidden = true;
+}
+
+// Passo 1: mostra la schermata di accoglienza (nessun accesso alla fotocamera ancora).
+$('#btn-scatta-foto').addEventListener('click', () => {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     mostraToast('Fotocamera non disponibile: usa il pulsante di selezione file.');
     inputFoto.click();
     return;
   }
+  resetModaleCamera();
+  modaleCamera.hidden = false;
+});
+
+$('#btn-annulla-intro-camera').addEventListener('click', () => {
+  modaleCamera.hidden = true;
+});
+
+// Passo 2: l'utente conferma esplicitamente -> ora chiediamo davvero l'accesso.
+$('#btn-attiva-camera').addEventListener('click', async () => {
+  schermataIntroCamera.hidden = true;
+  vistaCamera.hidden = false;
   richiestaCameraAttiva = true;
   statoCamera.textContent = 'Richiesta autorizzazione fotocamera... conferma nel popup del browser.';
   statoCamera.hidden = false;
-  modaleCamera.hidden = false;
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment' },
@@ -310,6 +330,7 @@ function chiudiCamera() {
   }
   videoCamera.srcObject = null;
   modaleCamera.hidden = true;
+  resetModaleCamera();
 }
 
 $('#btn-annulla-camera').addEventListener('click', chiudiCamera);
