@@ -148,7 +148,10 @@
   <!-- Modale fotocamera -->
   <div id="modale-camera" class="modale" hidden>
     <div class="modale-contenuto">
-      <video id="video-camera" autoplay playsinline></video>
+      <div class="video-wrap">
+        <video id="video-camera" autoplay playsinline></video>
+        <p id="stato-camera" class="stato-camera" hidden>Richiesta autorizzazione fotocamera...</p>
+      </div>
       <canvas id="canvas-camera" hidden></canvas>
       <div class="modale-azioni">
         <button type="button" class="btn btn-secondary" id="btn-annulla-camera">Annulla</button>

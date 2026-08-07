@@ -264,29 +264,51 @@ inputFoto.addEventListener('change', () => {
   }
 });
 
+const statoCamera = $('#stato-camera');
+let richiestaCameraAttiva = false;
+
 $('#btn-scatta-foto').addEventListener('click', async () => {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     mostraToast('Fotocamera non disponibile: usa il pulsante di selezione file.');
     inputFoto.click();
     return;
   }
+  richiestaCameraAttiva = true;
+  statoCamera.textContent = 'Richiesta autorizzazione fotocamera... conferma nel popup del browser.';
+  statoCamera.hidden = false;
+  modaleCamera.hidden = false;
   try {
-    streamCamera = await navigator.mediaDevices.getUserMedia({
+    const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment' },
       audio: false,
     });
+    if (!richiestaCameraAttiva) {
+      // L'utente ha annullato mentre il browser chiedeva il permesso.
+      stream.getTracks().forEach(t => t.stop());
+      return;
+    }
+    streamCamera = stream;
     videoCamera.srcObject = streamCamera;
-    modaleCamera.hidden = false;
+    statoCamera.hidden = true;
   } catch (e) {
-    mostraToast('Impossibile accedere alla fotocamera: ' + e.message);
+    modaleCamera.hidden = true;
+    if (e.name === 'NotAllowedError') {
+      mostraToast('Permesso fotocamera negato. Controlla le impostazioni del sito nel browser.');
+    } else {
+      mostraToast('Impossibile accedere alla fotocamera: ' + e.message);
+    }
   }
 });
 
+videoCamera.addEventListener('playing', () => { statoCamera.hidden = true; });
+
 function chiudiCamera() {
+  richiestaCameraAttiva = false;
   if (streamCamera) {
     streamCamera.getTracks().forEach(t => t.stop());
     streamCamera = null;
   }
+  videoCamera.srcObject = null;
   modaleCamera.hidden = true;
 }
 
