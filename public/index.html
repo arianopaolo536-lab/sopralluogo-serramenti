@@ -29,6 +29,9 @@
     <section id="view-nuovo" class="view" hidden>
       <h2>Nuovo sopralluogo</h2>
       <form id="form-nuovo" class="card">
+        <label>Nome cantiere / progetto
+          <input type="text" name="nome_cantiere" placeholder="Es. Cantiere Via Roma / Condominio Aurora">
+        </label>
         <label>Nome cliente *
           <input type="text" name="cliente_nome" required placeholder="Es. Mario Rossi">
         </label>
@@ -43,9 +46,14 @@
             <input type="email" name="email" placeholder="cliente@email.it">
           </label>
         </div>
-        <label>Data sopralluogo *
-          <input type="date" name="data_sopralluogo" required>
-        </label>
+        <div class="riga-2">
+          <label>Data sopralluogo *
+            <input type="date" name="data_sopralluogo" required>
+          </label>
+          <label>Rilevatori
+            <input type="text" name="rilevatori" placeholder="Es. Paolo Ariano">
+          </label>
+        </div>
         <label>Note generali
           <textarea name="note" rows="3" placeholder="Note sul contesto, accessi, ecc."></textarea>
         </label>
@@ -59,13 +67,142 @@
     <!-- Vista dettaglio sopralluogo -->
     <section id="view-dettaglio" class="view" hidden>
       <button class="btn btn-link" id="btn-indietro">← Torna all'elenco</button>
-      <div id="dettaglio-info" class="card"></div>
 
-      <h3>Serramenti rilevati</h3>
-      <div id="lista-serramenti" class="lista"></div>
+      <div class="testata card">
+        <div class="testata-riga-alto">
+          <span class="testata-etichetta">Sopralluogo operativo</span>
+          <div class="testata-azioni">
+            <span id="indicatore-salvataggio" class="badge-salvato">● Salvato</span>
+            <button type="button" class="btn btn-secondary" id="btn-stampa">🖨 Stampa tutto</button>
+          </div>
+        </div>
+        <textarea id="campo-titolo" class="campo-titolo" rows="1" placeholder="Titolo del sopralluogo (tocca per modificare)"></textarea>
 
-      <h3>Aggiungi serramento</h3>
-      <form id="form-serramento" class="card" enctype="multipart/form-data">
+        <div class="statistiche">
+          <div class="statistica"><span id="stat-serramenti" class="statistica-valore">0</span><span class="statistica-etichetta">serramenti</span></div>
+          <div class="statistica"><span id="stat-mq" class="statistica-valore">0</span><span class="statistica-etichetta">m² da file</span></div>
+          <div class="statistica"><span id="stat-cassonetti" class="statistica-valore">0</span><span class="statistica-etichetta">cassonetti</span></div>
+          <div class="statistica"><span id="stat-pellicola" class="statistica-valore">0</span><span class="statistica-etichetta" id="stat-pellicola-etichetta">m² pellicola</span></div>
+        </div>
+
+        <div class="riga-2 testata-campi">
+          <label>Data sopralluogo
+            <input type="date" id="campo-data" data-autosave>
+          </label>
+          <label>
+            <div class="campo-con-detta">
+              <span>Rilevatori</span>
+              <button type="button" class="btn-detta" id="btn-detta-rilevatori" data-target="campo-rilevatori">🎙 Detta</button>
+            </div>
+            <input type="text" id="campo-rilevatori" data-autosave placeholder="Es. Paolo Ariano">
+          </label>
+        </div>
+      </div>
+
+      <!-- Tab -->
+      <div class="tab-nav">
+        <button type="button" class="tab-btn attivo" data-tab="dati-generali"><span class="tab-numero">01</span>Dati generali</button>
+        <button type="button" class="tab-btn" data-tab="rilievo-misure"><span class="tab-numero">02</span>Rilievo misure</button>
+        <button type="button" class="tab-btn" data-tab="riepilogo"><span class="tab-numero">03</span>Riepilogo</button>
+      </div>
+
+      <!-- Tab 01: Dati generali -->
+      <div id="tab-dati-generali" class="tab-panel">
+        <div class="card">
+          <div class="campo-con-detta">
+            <span>Note generali sopralluogo</span>
+            <button type="button" class="btn-detta" data-target="campo-note-generali">🎙 Detta</button>
+          </div>
+          <textarea id="campo-note-generali" data-autosave rows="4" placeholder="Contesto, età dell'edificio, criticità generali..."></textarea>
+        </div>
+
+        <div class="card">
+          <button type="button" class="btn btn-secondary" id="btn-toggle-fabbricato">Dati fabbricato</button>
+          <div id="blocco-dati-fabbricato" hidden>
+            <div class="campo-con-detta">
+              <span>Dati fabbricato</span>
+              <button type="button" class="btn-detta" data-target="campo-dati-fabbricato">🎙 Detta</button>
+            </div>
+            <textarea id="campo-dati-fabbricato" data-autosave rows="4" placeholder="Anno costruzione, numero piani, tipologia struttura..."></textarea>
+          </div>
+        </div>
+
+        <div id="sezioni-dati-generali"></div>
+      </div>
+
+      <!-- Tab 02: Rilievo misure -->
+      <div id="tab-rilievo-misure" class="tab-panel" hidden>
+        <div class="rilievo-header">
+          <div>
+            <span class="eyebrow">Fase successiva</span>
+            <h2>Rilievo puntuale delle misure</h2>
+            <p id="rilievo-sottotitolo" class="vuoto-sottotitolo">Da utilizzare in sede di rilievo esecutivo · 0 schede inserite</p>
+          </div>
+          <button type="button" class="btn btn-primary" id="btn-aggiungi-serramento">+ Aggiungi serramento</button>
+        </div>
+        <label class="campo-ricerca">Cerca
+          <input type="text" id="campo-cerca-serramento" placeholder="Codice, piano, interno, ambiente...">
+        </label>
+        <div id="lista-serramenti" class="lista"></div>
+        <div id="rilievo-vuoto" class="stato-vuoto" hidden>
+          <div class="stato-vuoto-icona">+</div>
+          <p class="stato-vuoto-titolo">Nessun rilievo puntuale inserito</p>
+          <p class="stato-vuoto-testo">In fase di rilievo esecutivo, inserisci ogni serramento con misure, dettagli e fotografie.</p>
+          <button type="button" class="btn btn-primary" id="btn-inserisci-primo">Inserisci il primo</button>
+        </div>
+      </div>
+
+      <!-- Tab 03: Riepilogo -->
+      <div id="tab-riepilogo" class="tab-panel" hidden>
+        <div class="card">
+          <h2>Riepilogo dati cantiere</h2>
+          <div class="statistiche">
+            <div class="statistica"><span id="rp-stat-serramenti" class="statistica-valore">0</span><span class="statistica-etichetta">serramenti</span></div>
+            <div class="statistica"><span id="rp-stat-mq" class="statistica-valore">0</span><span class="statistica-etichetta">m² da file</span></div>
+            <div class="statistica"><span id="rp-stat-cassonetti" class="statistica-valore">0</span><span class="statistica-etichetta">cassonetti</span></div>
+            <div class="statistica"><span id="rp-stat-pellicola" class="statistica-valore">0</span><span class="statistica-etichetta">m² pellicola</span></div>
+          </div>
+          <label class="riga-pellicola">% pellicola prevista
+            <input type="number" id="campo-pellicola" data-autosave min="0" max="100" step="1">
+          </label>
+        </div>
+        <div class="card tabella-riepilogo-wrap">
+          <h3 class="abaco-titolo">Abaco serramenti — dettaglio foto e misure</h3>
+          <table class="tabella-riepilogo">
+            <thead>
+              <tr>
+                <th>Foto</th><th>Cod.</th><th>Ambiente</th><th>Tipo</th><th>L×H (cm)</th><th>Cassonetto</th><th>Stato</th>
+              </tr>
+            </thead>
+            <tbody id="corpo-tabella-riepilogo"></tbody>
+          </table>
+          <p id="riepilogo-vuoto" class="vuoto" hidden>Nessun serramento ancora rilevato.</p>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Modale aggiungi/modifica serramento -->
+  <div id="modale-serramento" class="modale" hidden>
+    <div class="modale-contenuto modale-form">
+      <div class="modale-form-header">
+        <h3 id="titolo-modale-serramento">Aggiungi serramento</h3>
+        <button type="button" class="btn-chiudi-modale" id="btn-chiudi-modale-serramento">✕</button>
+      </div>
+      <form id="form-serramento" class="modale-form-corpo" enctype="multipart/form-data">
+        <div class="riga-3">
+          <label>Codice
+            <input type="text" name="codice" placeholder="Es. S01">
+          </label>
+          <label>Piano
+            <input type="text" name="piano" placeholder="Es. 1° piano">
+          </label>
+          <label>Interno
+            <input type="text" name="interno" placeholder="Es. Int. 3">
+          </label>
+        </div>
         <div class="riga-2">
           <label>Ambiente *
             <input type="text" name="ambiente" required placeholder="Es. Cucina, Camera 1...">
@@ -118,15 +255,21 @@
             </select>
           </label>
         </div>
-        <label>Stato attuale
-          <select name="stato">
-            <option value="">Seleziona...</option>
-            <option>Buono</option>
-            <option>Da sostituire</option>
-            <option>Danneggiato</option>
-            <option>Assente (nuova apertura)</option>
-          </select>
-        </label>
+        <div class="riga-2">
+          <label>Stato attuale
+            <select name="stato">
+              <option value="">Seleziona...</option>
+              <option>Buono</option>
+              <option>Da sostituire</option>
+              <option>Danneggiato</option>
+              <option>Assente (nuova apertura)</option>
+            </select>
+          </label>
+          <label class="campo-checkbox">
+            <input type="checkbox" name="cassonetto">
+            Cassonetto presente
+          </label>
+        </div>
         <label>Note
           <textarea name="note" rows="2" placeholder="Dettagli aggiuntivi, colore, ferramenta, vetro, ecc."></textarea>
         </label>
@@ -138,21 +281,20 @@
           <img id="anteprima-foto" class="anteprima-foto" hidden>
         </label>
         <div class="azioni">
-          <button type="submit" class="btn btn-primary">Aggiungi serramento</button>
+          <button type="submit" class="btn btn-primary">Salva serramento</button>
         </div>
       </form>
-    </section>
+    </div>
+  </div>
 
-  </main>
-
-  <!-- Modale fotocamera -->
+  <!-- Modale fotocamera (riusabile: serramento e foto di sezione) -->
   <div id="modale-camera" class="modale" hidden>
     <div class="modale-contenuto">
 
       <!-- Schermata di accoglienza: mostrata prima di chiedere il permesso -->
       <div id="schermata-intro-camera" class="schermata-intro">
         <p>📷</p>
-        <p>Stai per attivare la fotocamera del dispositivo per scattare una foto del serramento.</p>
+        <p>Stai per attivare la fotocamera del dispositivo per scattare una foto.</p>
         <p class="schermata-intro-nota">Il browser potrebbe chiederti di confermare il permesso.</p>
         <div class="modale-azioni">
           <button type="button" class="btn btn-secondary" id="btn-annulla-intro-camera">Annulla</button>

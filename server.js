@@ -50,12 +50,19 @@ app.get('/api/sopralluoghi/:id', (req, res) => {
 });
 
 app.post('/api/sopralluoghi', (req, res) => {
-  const { cliente_nome, indirizzo, telefono, email, data_sopralluogo, note } = req.body;
+  const { titolo, nome_cantiere, cliente_nome, indirizzo, telefono, email, rilevatori, data_sopralluogo, note, pellicola_percento } = req.body;
   if (!cliente_nome || !indirizzo || !data_sopralluogo) {
     return res.status(400).json({ error: 'cliente_nome, indirizzo e data_sopralluogo sono obbligatori' });
   }
-  const creato = db.createSopralluogo({ cliente_nome, indirizzo, telefono, email, data_sopralluogo, note });
+  const creato = db.createSopralluogo({ titolo, nome_cantiere, cliente_nome, indirizzo, telefono, email, rilevatori, data_sopralluogo, note, pellicola_percento });
   res.status(201).json(creato);
+});
+
+// Aggiornamento parziale (usato per il salvataggio automatico dei campi).
+app.patch('/api/sopralluoghi/:id', (req, res) => {
+  const aggiornato = db.updateSopralluogo(req.params.id, req.body);
+  if (!aggiornato) return res.status(404).json({ error: 'Sopralluogo non trovato' });
+  res.json(aggiornato);
 });
 
 app.delete('/api/sopralluoghi/:id', (req, res) => {
@@ -67,6 +74,25 @@ app.delete('/api/sopralluoghi/:id', (req, res) => {
       const p = path.join(UPLOAD_DIR, path.basename(w.foto_path));
       if (fs.existsSync(p)) fs.unlinkSync(p);
     }
+  }
+  res.status(204).end();
+});
+
+// --- API: Foto delle sezioni "Dati generali" ---
+
+app.post('/api/sopralluoghi/:id/sezioni/:sezioneId/foto', upload.single('foto'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Nessuna foto ricevuta' });
+  const foto_path = `/uploads/${req.file.filename}`;
+  const foto = db.aggiungiFotoSezione(req.params.id, req.params.sezioneId, foto_path);
+  if (!foto) return res.status(404).json({ error: 'Sopralluogo non trovato' });
+  res.status(201).json(foto);
+});
+
+app.delete('/api/sopralluoghi/:id/sezioni/:sezioneId/foto/:fotoId', (req, res) => {
+  const rimossa = db.rimuoviFotoSezione(req.params.id, req.params.sezioneId, req.params.fotoId);
+  if (rimossa && rimossa.path) {
+    const p = path.join(UPLOAD_DIR, path.basename(rimossa.path));
+    if (fs.existsSync(p)) fs.unlinkSync(p);
   }
   res.status(204).end();
 });
@@ -85,6 +111,14 @@ app.post('/api/sopralluoghi/:id/serramenti', upload.single('foto'), (req, res) =
   const foto_path = req.file ? `/uploads/${req.file.filename}` : null;
   const creato = db.createSerramento(req.params.id, { ...req.body, foto_path });
   res.status(201).json(creato);
+});
+
+app.patch('/api/serramenti/:id', upload.single('foto'), (req, res) => {
+  const dati = { ...req.body };
+  if (req.file) dati.foto_path = `/uploads/${req.file.filename}`;
+  const aggiornato = db.updateSerramento(req.params.id, dati);
+  if (!aggiornato) return res.status(404).json({ error: 'Serramento non trovato' });
+  res.json(aggiornato);
 });
 
 app.delete('/api/serramenti/:id', (req, res) => {
