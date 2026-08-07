@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sopralluogo Serramenti</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>🪟 Sopralluogo Serramenti</h1>
+    <button id="btn-nuovo" class="btn btn-primary">+ Nuovo sopralluogo</button>
+  </header>
+
+  <p id="avviso-voce" class="avviso-voce" hidden>
+    ℹ️ La dettatura vocale (🎤) non è supportata da questo browser: usa Chrome (Android/desktop) per abilitarla.
+  </p>
+
+  <main id="app">
+
+    <!-- Vista elenco -->
+    <section id="view-elenco" class="view">
+      <h2>Sopralluoghi</h2>
+      <div id="lista-sopralluoghi" class="lista"></div>
+      <p id="elenco-vuoto" class="vuoto" hidden>Nessun sopralluogo registrato. Crea il primo con "+ Nuovo sopralluogo".</p>
+    </section>
+
+    <!-- Vista nuovo sopralluogo -->
+    <section id="view-nuovo" class="view" hidden>
+      <h2>Nuovo sopralluogo</h2>
+      <form id="form-nuovo" class="card">
+        <label>Nome cliente *
+          <input type="text" name="cliente_nome" required placeholder="Es. Mario Rossi">
+        </label>
+        <label>Indirizzo *
+          <input type="text" name="indirizzo" required placeholder="Via, civico, città">
+        </label>
+        <div class="riga-2">
+          <label>Telefono
+            <input type="tel" name="telefono" placeholder="Es. 333 1234567">
+          </label>
+          <label>Email
+            <input type="email" name="email" placeholder="cliente@email.it">
+          </label>
+        </div>
+        <label>Data sopralluogo *
+          <input type="date" name="data_sopralluogo" required>
+        </label>
+        <label>Note generali
+          <textarea name="note" rows="3" placeholder="Note sul contesto, accessi, ecc."></textarea>
+        </label>
+        <div class="azioni">
+          <button type="button" class="btn btn-secondary" id="btn-annulla-nuovo">Annulla</button>
+          <button type="submit" class="btn btn-primary">Crea e continua</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Vista dettaglio sopralluogo -->
+    <section id="view-dettaglio" class="view" hidden>
+      <button class="btn btn-link" id="btn-indietro">← Torna all'elenco</button>
+      <div id="dettaglio-info" class="card"></div>
+
+      <h3>Serramenti rilevati</h3>
+      <div id="lista-serramenti" class="lista"></div>
+
+      <h3>Aggiungi serramento</h3>
+      <form id="form-serramento" class="card" enctype="multipart/form-data">
+        <div class="riga-2">
+          <label>Ambiente *
+            <input type="text" name="ambiente" required placeholder="Es. Cucina, Camera 1...">
+          </label>
+          <label>Tipo *
+            <select name="tipo" required>
+              <option value="">Seleziona...</option>
+              <option>Finestra</option>
+              <option>Portafinestra</option>
+              <option>Porta d'ingresso</option>
+              <option>Scorrevole</option>
+              <option>Alzante scorrevole</option>
+              <option>Vasistas</option>
+              <option>Altro</option>
+            </select>
+          </label>
+        </div>
+        <div class="riga-3">
+          <label>Larghezza (cm)
+            <input type="number" step="0.1" min="0" name="larghezza_cm" placeholder="Es. 120">
+          </label>
+          <label>Altezza (cm)
+            <input type="number" step="0.1" min="0" name="altezza_cm" placeholder="Es. 140">
+          </label>
+          <label>Spessore muro (cm)
+            <input type="number" step="0.1" min="0" name="spessore_muro_cm" placeholder="Es. 30">
+          </label>
+        </div>
+        <div class="riga-2">
+          <label>Tipo apertura
+            <select name="tipo_apertura">
+              <option value="">Seleziona...</option>
+              <option>Battente</option>
+              <option>Anta ribalta</option>
+              <option>Scorrevole</option>
+              <option>Scorrevole alzante (HS)</option>
+              <option>Fisso</option>
+              <option>Altro</option>
+            </select>
+          </label>
+          <label>Materiale attuale
+            <select name="materiale_attuale">
+              <option value="">Seleziona...</option>
+              <option>Legno</option>
+              <option>PVC</option>
+              <option>Alluminio</option>
+              <option>Ferro</option>
+              <option>Legno-alluminio</option>
+              <option>Altro</option>
+            </select>
+          </label>
+        </div>
+        <label>Stato attuale
+          <select name="stato">
+            <option value="">Seleziona...</option>
+            <option>Buono</option>
+            <option>Da sostituire</option>
+            <option>Danneggiato</option>
+            <option>Assente (nuova apertura)</option>
+          </select>
+        </label>
+        <label>Note
+          <textarea name="note" rows="2" placeholder="Dettagli aggiuntivi, colore, ferramenta, vetro, ecc."></textarea>
+        </label>
+        <label>Foto
+          <div class="riga-foto">
+            <input type="file" name="foto" id="input-foto" accept="image/*" capture="environment">
+            <button type="button" class="btn btn-secondary" id="btn-scatta-foto">📷 Scatta foto</button>
+          </div>
+          <img id="anteprima-foto" class="anteprima-foto" hidden>
+        </label>
+        <div class="azioni">
+          <button type="submit" class="btn btn-primary">Aggiungi serramento</button>
+        </div>
+      </form>
+    </section>
+
+  </main>
+
+  <!-- Modale fotocamera -->
+  <div id="modale-camera" class="modale" hidden>
+    <div class="modale-contenuto">
+      <video id="video-camera" autoplay playsinline></video>
+      <canvas id="canvas-camera" hidden></canvas>
+      <div class="modale-azioni">
+        <button type="button" class="btn btn-secondary" id="btn-annulla-camera">Annulla</button>
+        <button type="button" class="btn btn-primary" id="btn-cattura-camera">Scatta</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

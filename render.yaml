@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: sopralluogo-serramenti
+    env: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+    # Disco persistente: con un piano a pagamento (Starter o superiore) i
+    # sopralluoghi e le foto restano salvati tra un deploy e l'altro.
+    # Se vuoi un piano superiore (Standard, Pro...) cambia "plan" sopra.
+    disk:
+      name: dati-sopralluoghi
+      mountPath: /var/data
+      sizeGB: 1
