@@ -459,6 +459,17 @@ function avviaDettaturaSuCampo(bottone, campo) {
   };
   r.onresult = (ev) => {
     const testo = ev.results[0][0].transcript.trim();
+    if (campo.tagName === 'SELECT') {
+      const opzione = [...campo.options].find(o => o.textContent.toLowerCase().includes(testo.toLowerCase()));
+      if (opzione) {
+        campo.value = opzione.value;
+      } else {
+        mostraToast(`Nessuna opzione corrisponde a "${testo}"`);
+      }
+      campo.dispatchEvent(new Event('input', { bubbles: true }));
+      campo.dispatchEvent(new Event('change', { bubbles: true }));
+      return;
+    }
     const valore = campo.type === 'number' ? estraiNumero(testo) : testo;
     campo.value = campo.value ? `${campo.value} ${valore}` : valore;
     campo.dispatchEvent(new Event('input', { bubbles: true }));
@@ -496,6 +507,9 @@ function abilitaVoceSuCampo(campo) {
   btn.addEventListener('click', () => avviaDettaturaSuCampo(btn, campo));
 }
 $all('input[type=text], input[type=tel], input[type=email], textarea', $('#form-nuovo')).forEach(abilitaVoceSuCampo);
+
+// Dettatura anche nel modulo "Aggiungi/Modifica serramento" (testo, numeri e menu a tendina)
+$all('input[type=text], input[type=number], textarea, select', $('#form-serramento')).forEach(abilitaVoceSuCampo);
 
 // ---------- Rilievo misure ----------
 $('#campo-cerca-serramento').addEventListener('input', (e) => renderRilievoMisure(e.target.value));

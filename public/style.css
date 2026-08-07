@@ -1,12 +1,15 @@
 :root {
   --primary: #1d6f5c;
   --primary-dark: #14503f;
-  --bg: #f5f6f4;
-  --card-bg: #ffffff;
-  --border: #e1e3e0;
-  --text: #22282a;
-  --muted: #6b7370;
+  --accent: #c0392b;
+  --bg: #eef6f1;
+  --card-bg: rgba(255, 255, 255, 0.6);
+  --border: rgba(255, 255, 255, 0.55);
+  --border-solido: #dfe6e2;
+  --text: #1c2624;
+  --muted: #5c6b66;
   --danger: #b3392c;
+  --sfumatura-vetro: blur(16px);
   color-scheme: light;
 }
 
@@ -15,8 +18,18 @@
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: var(--bg);
   color: var(--text);
+  min-height: 100vh;
+  /* Sfondo "a serramento": leggera griglia che richiama i profili di un infisso,
+     con due aloni di colore ispirati al verde/rosso del brand. */
+  background-color: #eef6f1;
+  background-image:
+    repeating-linear-gradient(0deg, rgba(29,111,92,.05) 0px, rgba(29,111,92,.05) 1px, transparent 1px, transparent 110px),
+    repeating-linear-gradient(90deg, rgba(29,111,92,.05) 0px, rgba(29,111,92,.05) 1px, transparent 1px, transparent 110px),
+    radial-gradient(circle at 12% 8%, rgba(29,111,92,.16), transparent 42%),
+    radial-gradient(circle at 92% 12%, rgba(192,57,43,.12), transparent 38%),
+    linear-gradient(160deg, #eef6f1 0%, #f5f6f4 45%, #fdf1ee 100%);
+  background-attachment: fixed, fixed, fixed, fixed, fixed;
 }
 
 .app-header {
@@ -28,14 +41,30 @@ body {
   align-items: center;
   gap: 8px;
   padding: 14px 16px;
-  background: var(--primary);
+  background: linear-gradient(120deg, rgba(29,111,92,.92), rgba(20,80,66,.92));
+  backdrop-filter: var(--sfumatura-vetro);
+  -webkit-backdrop-filter: var(--sfumatura-vetro);
   color: white;
   flex-wrap: wrap;
+  box-shadow: 0 4px 20px rgba(20,50,40,.12);
 }
 
 .app-header h1 {
   font-size: 1.15rem;
   margin: 0;
+}
+
+.app-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.icona-serramento {
+  width: 30px;
+  height: 30px;
+  color: #fff;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.2));
 }
 
 main {
@@ -50,23 +79,30 @@ main {
 
 .card {
   background: var(--card-bg);
+  backdrop-filter: var(--sfumatura-vetro);
+  -webkit-backdrop-filter: var(--sfumatura-vetro);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-top: 3px solid rgba(29,111,92,.35);
+  border-radius: 14px;
   padding: 16px;
   margin-bottom: 12px;
+  box-shadow: 0 8px 28px rgba(20,50,40,.07);
 }
 
 .lista { display: flex; flex-direction: column; gap: 10px; }
 
 .item-sopralluogo {
   background: var(--card-bg);
+  backdrop-filter: var(--sfumatura-vetro);
+  -webkit-backdrop-filter: var(--sfumatura-vetro);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 14px;
   cursor: pointer;
-  transition: box-shadow .15s ease;
+  transition: box-shadow .15s ease, transform .15s ease;
+  box-shadow: 0 6px 20px rgba(20,50,40,.06);
 }
-.item-sopralluogo:hover { box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+.item-sopralluogo:hover { box-shadow: 0 8px 26px rgba(20,50,40,.12); transform: translateY(-1px); }
 .item-sopralluogo .riga-titolo {
   display: flex;
   justify-content: space-between;
@@ -80,11 +116,14 @@ main {
 
 .item-serramento {
   background: var(--card-bg);
+  backdrop-filter: var(--sfumatura-vetro);
+  -webkit-backdrop-filter: var(--sfumatura-vetro);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 12px;
   display: flex;
   gap: 12px;
+  box-shadow: 0 6px 20px rgba(20,50,40,.06);
 }
 .item-serramento img {
   width: 84px;
@@ -102,7 +141,7 @@ main {
   font-size: .75rem;
   padding: 2px 8px;
   border-radius: 999px;
-  background: #eef3f1;
+  background: rgba(29,111,92,.12);
   color: var(--primary-dark);
   margin-top: 6px;
 }
@@ -120,11 +159,19 @@ label {
 input, select, textarea {
   font-size: 1rem;
   padding: 10px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255,255,255,.7);
   border-radius: 8px;
   font-family: inherit;
   color: var(--text);
-  background: #fff;
+  background: rgba(255,255,255,.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: background .15s ease, border-color .15s ease;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  background: rgba(255,255,255,.92);
+  border-color: rgba(29,111,92,.45);
 }
 
 .riga-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -143,9 +190,19 @@ input, select, textarea {
   font-weight: 600;
   cursor: pointer;
 }
-.btn-primary { background: var(--primary); color: white; }
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  box-shadow: 0 4px 14px rgba(29,111,92,.28);
+}
 .btn-primary:hover { background: var(--primary-dark); }
-.btn-secondary { background: #eceeec; color: var(--text); }
+.btn-secondary {
+  background: rgba(255,255,255,.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
 .btn-link { background: none; color: var(--primary-dark); padding: 8px 0; font-weight: 600; }
 .btn-danger { background: none; color: var(--danger); font-weight: 600; padding: 4px 8px; }
 
@@ -156,12 +213,15 @@ input, select, textarea {
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--text);
+  background: rgba(28,38,36,.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   color: white;
   padding: 10px 18px;
   border-radius: 999px;
   font-size: .9rem;
   z-index: 50;
+  box-shadow: 0 8px 24px rgba(0,0,0,.2);
 }
 
 /* Dettatura vocale */
@@ -185,7 +245,9 @@ input, select, textarea {
 .btn-mic {
   flex-shrink: 0;
   border: 1px solid var(--border);
-  background: #fff;
+  background: rgba(255,255,255,.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   border-radius: 8px;
   width: 42px;
   font-size: 1.1rem;
@@ -312,14 +374,15 @@ input, select, textarea {
 .badge-salvato {
   font-size: .8rem;
   color: var(--primary-dark);
-  background: #eef3f1;
+  background: rgba(29,111,92,.12);
+  backdrop-filter: blur(4px);
   padding: 4px 10px;
   border-radius: 999px;
   white-space: nowrap;
 }
 .badge-salvato.salvataggio {
   color: #8a6d1f;
-  background: #fbf1d8;
+  background: rgba(251,241,216,.85);
 }
 .campo-titolo {
   width: 100%;
@@ -331,10 +394,11 @@ input, select, textarea {
   resize: none;
   font-family: inherit;
   color: var(--text);
+  border-radius: 6px;
 }
 .campo-titolo:focus {
   outline: none;
-  background: #fafbfa;
+  background: rgba(255,255,255,.55);
 }
 
 .statistiche {
@@ -344,7 +408,10 @@ input, select, textarea {
   margin: 12px 0;
 }
 .statistica {
-  background: #f6f8f6;
+  background: rgba(255,255,255,.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 10px 8px;
   text-align: center;
@@ -376,7 +443,9 @@ input, select, textarea {
 }
 .tab-btn {
   border: 1px solid var(--border);
-  background: #eceeec;
+  background: rgba(255,255,255,.32);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   color: var(--muted);
   border-radius: 10px 10px 0 0;
   padding: 12px 10px;
@@ -385,9 +454,10 @@ input, select, textarea {
   text-align: left;
   cursor: pointer;
   border-bottom: 3px solid transparent;
+  transition: background .15s ease;
 }
 .tab-btn.attivo {
-  background: #fff;
+  background: rgba(255,255,255,.8);
   color: var(--text);
   border-bottom: 3px solid var(--primary);
 }
@@ -414,7 +484,9 @@ input, select, textarea {
 }
 .btn-detta {
   border: 1px solid var(--border);
-  background: #f6f8f6;
+  background: rgba(255,255,255,.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   border-radius: 999px;
   padding: 5px 12px;
   font-size: .78rem;
@@ -434,10 +506,13 @@ input, select, textarea {
 /* ===== Sezioni a fisarmonica (Dati generali) ===== */
 .sezione-accordion {
   background: var(--card-bg);
+  backdrop-filter: var(--sfumatura-vetro);
+  -webkit-backdrop-filter: var(--sfumatura-vetro);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   margin-bottom: 12px;
   overflow: hidden;
+  box-shadow: 0 6px 20px rgba(20,50,40,.06);
 }
 .sezione-header {
   width: 100%;
@@ -455,7 +530,7 @@ input, select, textarea {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: #eef3f1;
+  background: linear-gradient(135deg, rgba(29,111,92,.18), rgba(29,111,92,.08));
   color: var(--primary-dark);
   display: flex;
   align-items: center;
@@ -491,7 +566,9 @@ input, select, textarea {
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
-  background: #fff;
+  background: rgba(255,255,255,.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 .foto-item img {
   width: 100%;
@@ -546,8 +623,11 @@ input, select, textarea {
 .campo-ricerca { margin-bottom: 14px; }
 
 .stato-vuoto {
-  border: 2px dashed var(--border);
-  border-radius: 12px;
+  background: rgba(255,255,255,.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 2px dashed rgba(29,111,92,.3);
+  border-radius: 14px;
   padding: 36px 20px;
   text-align: center;
 }
@@ -555,8 +635,8 @@ input, select, textarea {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: #eceeec;
-  color: var(--muted);
+  background: rgba(29,111,92,.12);
+  color: var(--primary-dark);
   font-size: 1.6rem;
   display: flex;
   align-items: center;
@@ -568,15 +648,21 @@ input, select, textarea {
 
 /* ===== Modale form serramento ===== */
 .modale-form {
-  background: #fff;
+  background: rgba(255,255,255,.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255,255,255,.6);
   max-width: 560px;
   max-height: 90vh;
   overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.25);
 }
 .modale-form-header {
   position: sticky;
   top: 0;
-  background: #fff;
+  background: rgba(255,255,255,.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -587,7 +673,8 @@ input, select, textarea {
 .modale-form-header h3 { margin: 0; }
 .btn-chiudi-modale {
   border: none;
-  background: #eceeec;
+  background: rgba(29,111,92,.12);
+  color: var(--primary-dark);
   border-radius: 50%;
   width: 32px;
   height: 32px;
@@ -612,7 +699,15 @@ input, select, textarea {
 
 /* ===== Riepilogo ===== */
 .riga-pellicola { max-width: 220px; margin-top: 8px; }
-.tabella-riepilogo-wrap { overflow-x: auto; }
+.tabella-riepilogo-wrap {
+  overflow-x: auto;
+  background: rgba(255,255,255,.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
+}
 .tabella-riepilogo {
   width: 100%;
   border-collapse: collapse;
