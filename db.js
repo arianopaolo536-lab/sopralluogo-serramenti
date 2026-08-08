@@ -28,6 +28,9 @@ function normalizzaSerramento(w) {
   if (w.dispositivo_misurazione === undefined) w.dispositivo_misurazione = null;
   if (w.misura_confermata === undefined) w.misura_confermata = true;
   if (!Array.isArray(w.storico_misure)) w.storico_misure = [];
+  if (w.num_ante === undefined) w.num_ante = null;
+  if (w.tapparella === undefined) w.tapparella = false;
+  if (w.inferriata === undefined) w.inferriata = false;
   return w;
 }
 
@@ -179,6 +182,10 @@ function creaDb(dataDir) {
         tipo_apertura: data.tipo_apertura || null,
         materiale_attuale: data.materiale_attuale || null,
         cassonetto: data.cassonetto === true || data.cassonetto === 'true' || data.cassonetto === 'on',
+        // --- Tag opzionali per dataset di riconoscimento AI futuro (tipo già coperto da "tipo") ---
+        num_ante: data.num_ante || null,
+        tapparella: data.tapparella === true || data.tapparella === 'true' || data.tapparella === 'on',
+        inferriata: data.inferriata === true || data.inferriata === 'true' || data.inferriata === 'on',
         stato: data.stato || null,
         note: data.note || null,
         foto_path: data.foto_path || null,
@@ -202,7 +209,7 @@ function creaDb(dataDir) {
     updateSerramento(id, data, operatore) {
       const w = this.getSerramento(id);
       if (!w) return null;
-      const campiTesto = ['codice', 'piano', 'interno', 'ambiente', 'tipo', 'tipo_apertura', 'materiale_attuale', 'stato', 'note', 'metodo_misurazione', 'attendibilita', 'dispositivo_misurazione'];
+      const campiTesto = ['codice', 'piano', 'interno', 'ambiente', 'tipo', 'tipo_apertura', 'materiale_attuale', 'stato', 'note', 'metodo_misurazione', 'attendibilita', 'dispositivo_misurazione', 'num_ante'];
       for (const campo of campiTesto) {
         if (Object.prototype.hasOwnProperty.call(data, campo) && data[campo] !== undefined) {
           w[campo] = data[campo] || null;
@@ -228,6 +235,12 @@ function creaDb(dataDir) {
       }
       if (Object.prototype.hasOwnProperty.call(data, 'cassonetto')) {
         w.cassonetto = data.cassonetto === true || data.cassonetto === 'true' || data.cassonetto === 'on';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'tapparella')) {
+        w.tapparella = data.tapparella === true || data.tapparella === 'true' || data.tapparella === 'on';
+      }
+      if (Object.prototype.hasOwnProperty.call(data, 'inferriata')) {
+        w.inferriata = data.inferriata === true || data.inferriata === 'true' || data.inferriata === 'on';
       }
       if (Object.prototype.hasOwnProperty.call(data, 'misura_confermata')) {
         w.misura_confermata = data.misura_confermata === true || data.misura_confermata === 'true';

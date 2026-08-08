@@ -214,7 +214,7 @@
           <table class="tabella-riepilogo">
             <thead>
               <tr>
-                <th>Foto</th><th>Cod.</th><th>Ambiente</th><th>Tipo</th><th>L×H (cm)</th><th>Cassonetto</th><th>Stato</th>
+                <th>Foto</th><th>Cod.</th><th>Ambiente</th><th>Tipo</th><th>N. ante</th><th>L×H (cm)</th><th>Cassonetto</th><th>Stato</th>
               </tr>
             </thead>
             <tbody id="corpo-tabella-riepilogo"></tbody>
@@ -308,11 +308,33 @@
               <option>Assente (nuova apertura)</option>
             </select>
           </label>
+          <label>N. ante
+            <select name="num_ante">
+              <option value="">Seleziona...</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3+">3+</option>
+            </select>
+          </label>
+        </div>
+        <div class="riga-3">
           <label class="campo-checkbox">
             <input type="checkbox" name="cassonetto">
             Cassonetto presente
           </label>
+          <label class="campo-checkbox">
+            <input type="checkbox" name="tapparella">
+            Tapparella presente
+          </label>
+          <label class="campo-checkbox">
+            <input type="checkbox" name="inferriata">
+            Inferriata/grata presente
+          </label>
         </div>
+        <!-- Questi tag (tipo, n. ante, cassonetto, tapparella, inferriata) sono
+             opzionali e servono anche a costruire nel tempo un dataset di foto
+             etichettate per un futuro riconoscimento automatico — vedi
+             docs/ARCHITETTURA-FASE2.md. Nessun obbligo di compilazione. -->
         <label>Note
           <textarea name="note" rows="2" placeholder="Dettagli aggiuntivi, colore, ferramenta, vetro, ecc."></textarea>
         </label>

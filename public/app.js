@@ -749,7 +749,10 @@ function renderRilievoMisure(filtro = '') {
         <div class="misure">${[
           etichettaPos || null,
           w.larghezza_cm ? `${w.larghezza_cm}×${w.altezza_cm || '?'} cm` : null,
+          w.num_ante ? `${w.num_ante} ante` : null,
           w.cassonetto ? 'cassonetto' : null,
+          w.tapparella ? 'tapparella' : null,
+          w.inferriata ? 'inferriata' : null,
         ].filter(Boolean).join(' · ')}</div>
         ${w.stato ? `<span class="stato-badge">${escapeHtml(w.stato)}</span>` : ''}
         ${w.inCoda ? '<span class="stato-badge badge-in-coda">⏳ in coda offline</span>' : ''}
@@ -812,10 +815,12 @@ function apriModaleSerramento(w) {
   $('#anteprima-foto').hidden = true;
   $('#titolo-modale-serramento').textContent = w ? 'Modifica serramento' : 'Aggiungi serramento';
   if (w) {
-    for (const campo of ['codice', 'piano', 'interno', 'ambiente', 'tipo', 'larghezza_cm', 'altezza_cm', 'spessore_muro_cm', 'tipo_apertura', 'materiale_attuale', 'stato', 'note']) {
+    for (const campo of ['codice', 'piano', 'interno', 'ambiente', 'tipo', 'larghezza_cm', 'altezza_cm', 'spessore_muro_cm', 'tipo_apertura', 'materiale_attuale', 'stato', 'note', 'num_ante']) {
       if (form.elements[campo] && w[campo] != null) form.elements[campo].value = w[campo];
     }
     form.elements['cassonetto'].checked = !!w.cassonetto;
+    form.elements['tapparella'].checked = !!w.tapparella;
+    form.elements['inferriata'].checked = !!w.inferriata;
     if (w.foto_path) {
       $('#anteprima-foto').src = w.foto_path;
       $('#anteprima-foto').hidden = false;
@@ -829,6 +834,8 @@ function serramentoOttimisticoDaForm(fd) {
   delete w.foto;
   for (const c of ['larghezza_cm', 'altezza_cm', 'spessore_muro_cm']) w[c] = w[c] ? Number(w[c]) : null;
   w.cassonetto = w.cassonetto === 'true';
+  w.tapparella = w.tapparella === 'true';
+  w.inferriata = w.inferriata === 'true';
   return w;
 }
 
@@ -837,6 +844,8 @@ $('#form-serramento').addEventListener('submit', async (e) => {
   const form = e.target;
   const fd = new FormData(form);
   fd.set('cassonetto', form.elements['cassonetto'].checked ? 'true' : 'false');
+  fd.set('tapparella', form.elements['tapparella'].checked ? 'true' : 'false');
+  fd.set('inferriata', form.elements['inferriata'].checked ? 'true' : 'false');
   if (risultatoLidarCorrente) {
     fd.set('metodo_misurazione', risultatoLidarCorrente.metodoMisura || 'ar_lidar');
     fd.set('dispositivo_misurazione', risultatoLidarCorrente.dispositivo || '');
@@ -888,6 +897,7 @@ function renderTabellaRiepilogo() {
       <td>${escapeHtml(w.codice || '—')}</td>
       <td>${escapeHtml(w.ambiente)}</td>
       <td>${escapeHtml(w.tipo)}</td>
+      <td>${escapeHtml(w.num_ante || '—')}</td>
       <td>${w.larghezza_cm || '—'}×${w.altezza_cm || '—'}</td>
       <td>${w.cassonetto ? 'Sì' : 'No'}</td>
       <td>${escapeHtml(w.stato || '—')}</td>
