@@ -1429,6 +1429,57 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
             )
         }
 
+        // Disegna una "linea quota" in stile tecnico/righello: linea con
+        // tacche perpendicolari alle estremità + etichetta su una pillola
+        // scura al centro (leggibile su qualunque sfondo della foto).
+        func disegnaLineaQuota(_ cg: CGContext, da a: CGPoint, a b: CGPoint, etichetta: String) {
+            cg.saveGState()
+            cg.setStrokeColor(UIColor.white.cgColor)
+            cg.setLineWidth(3)
+            cg.move(to: a)
+            cg.addLine(to: b)
+            let dx = b.x - a.x, dy = b.y - a.y
+            let lunghezza = max(sqrt(dx * dx + dy * dy), 0.001)
+            let perpX = -dy / lunghezza * 10
+            let perpY = dx / lunghezza * 10
+            for punto in [a, b] {
+                cg.move(to: CGPoint(x: punto.x - perpX, y: punto.y - perpY))
+                cg.addLine(to: CGPoint(x: punto.x + perpX, y: punto.y + perpY))
+            }
+            cg.strokePath()
+            cg.restoreGState()
+
+            let centro = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+            let font = UIFont.boldSystemFont(ofSize: 26)
+            let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white]
+            let dimensione = (etichetta as NSString).size(withAttributes: attrs)
+            let paddingX: CGFloat = 10, paddingY: CGFloat = 6
+            let pillRect = CGRect(
+                x: centro.x - dimensione.width / 2 - paddingX,
+                y: centro.y - dimensione.height / 2 - paddingY,
+                width: dimensione.width + paddingX * 2,
+                height: dimensione.height + paddingY * 2
+            )
+            UIColor.black.withAlphaComponent(0.72).setFill()
+            UIBezierPath(roundedRect: pillRect, cornerRadius: pillRect.height / 2).fill()
+            (etichetta as NSString).draw(
+                at: CGPoint(x: centro.x - dimensione.width / 2, y: centro.y - dimensione.height / 2),
+                withAttributes: attrs
+            )
+        }
+
+        // Righello orizzontale (larghezza) offset sopra il lato alto (0=alto-sx,
+        // 1=alto-dx); righello verticale (altezza) offset a sinistra del lato
+        // sinistro (0=alto-sx, 3=basso-sx). Clampati a un margine minimo dal
+        // bordo dell'immagine, nel raro caso il serramento riempia il fotogramma.
+        let offsetRighello: CGFloat = 44
+        let yRighelloOrizzontale = max(min(puntiSchermo[0].y, puntiSchermo[1].y) - offsetRighello, 30)
+        let righelloOrizzontaleA = CGPoint(x: puntiSchermo[0].x, y: yRighelloOrizzontale)
+        let righelloOrizzontaleB = CGPoint(x: puntiSchermo[1].x, y: yRighelloOrizzontale)
+        let xRighelloVerticale = max(min(puntiSchermo[0].x, puntiSchermo[3].x) - offsetRighello, 30)
+        let righelloVerticaleA = CGPoint(x: xRighelloVerticale, y: puntiSchermo[0].y)
+        let righelloVerticaleB = CGPoint(x: xRighelloVerticale, y: puntiSchermo[3].y)
+
         let immagineFinale = renderer.image { ctx in
             // draw(in:) invece di draw(at:): ridimensiona l'immagine sorgente
             // (a piena risoluzione) dentro il canvas più piccolo.
@@ -1446,33 +1497,55 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
 
             for (i, punto) in puntiSchermo.enumerated() {
                 cg.setFillColor(coloreContornoAR.cgColor)
-                let raggio: CGFloat = 11
+                let raggio: CGFloat = 15
                 cg.fillEllipse(in: CGRect(x: punto.x - raggio, y: punto.y - raggio, width: raggio * 2, height: raggio * 2))
                 let numero = "\(i + 1)" as NSString
                 numero.draw(
-                    at: CGPoint(x: punto.x - 4, y: punto.y - 8),
-                    withAttributes: [.font: UIFont.boldSystemFont(ofSize: 15), .foregroundColor: UIColor.white]
+                    at: CGPoint(x: punto.x - 6, y: punto.y - 11),
+                    withAttributes: [.font: UIFont.boldSystemFont(ofSize: 20), .foregroundColor: UIColor.white]
                 )
             }
 
-            // Banda scura in basso con le quote, leggibile su qualunque sfondo.
-            let testo = String(
-                format: "L = %.0f mm    H = %.0f mm    Superficie = %.2f m²\n%@ · %@",
-                larghezzaM * 1000, altezzaM * 1000, superficieM2,
-                attendibilitaComplessiva().capitalized, identificatoreDispositivo()
-            )
-            let bandaAltezza: CGFloat = 76
+            // Linee sottili di richiamo dai vertici reali al righello (come nei
+            // disegni tecnici), poi il righello vero e proprio con tacche+etichetta.
+            cg.setStrokeColor(UIColor.white.withAlphaComponent(0.55).cgColor)
+            cg.setLineWidth(1.5)
+            cg.move(to: puntiSchermo[0]); cg.addLine(to: righelloOrizzontaleA)
+            cg.move(to: puntiSchermo[1]); cg.addLine(to: righelloOrizzontaleB)
+            cg.move(to: puntiSchermo[0]); cg.addLine(to: righelloVerticaleA)
+            cg.move(to: puntiSchermo[3]); cg.addLine(to: righelloVerticaleB)
+            cg.strokePath()
+
+            disegnaLineaQuota(cg, da: righelloOrizzontaleA, a: righelloOrizzontaleB, etichetta: String(format: "%.0f mm", larghezzaM * 1000))
+            disegnaLineaQuota(cg, da: righelloVerticaleA, a: righelloVerticaleB, etichetta: String(format: "%.0f mm", altezzaM * 1000))
+
+            // Banda scura in basso, molto più grande e leggibile: riga
+            // principale con L/H/superficie in grande, riga secondaria più
+            // piccola con attendibilità e dispositivo.
+            let bandaAltezza: CGFloat = 120
             let bandaRect = CGRect(x: 0, y: viewportSize.height - bandaAltezza, width: viewportSize.width, height: bandaAltezza)
-            cg.setFillColor(UIColor.black.withAlphaComponent(0.62).cgColor)
+            cg.setFillColor(UIColor.black.withAlphaComponent(0.7).cgColor)
             cg.fill(bandaRect)
 
             let paragrafo = NSMutableParagraphStyle()
             paragrafo.alignment = .center
-            (testo as NSString).draw(
-                in: bandaRect.insetBy(dx: 12, dy: 10),
+
+            let testoPrincipale = String(format: "L = %.0f mm   H = %.0f mm   S = %.2f m²", larghezzaM * 1000, altezzaM * 1000, superficieM2)
+            (testoPrincipale as NSString).draw(
+                in: CGRect(x: bandaRect.minX + 10, y: bandaRect.minY + 16, width: bandaRect.width - 20, height: 44),
                 withAttributes: [
-                    .font: UIFont.boldSystemFont(ofSize: 17),
+                    .font: UIFont.boldSystemFont(ofSize: 30),
                     .foregroundColor: UIColor.white,
+                    .paragraphStyle: paragrafo,
+                ]
+            )
+
+            let testoSecondario = "\(attendibilitaComplessiva().capitalized) · \(identificatoreDispositivo())"
+            (testoSecondario as NSString).draw(
+                in: CGRect(x: bandaRect.minX + 10, y: bandaRect.minY + 68, width: bandaRect.width - 20, height: 30),
+                withAttributes: [
+                    .font: UIFont.systemFont(ofSize: 16, weight: .medium),
+                    .foregroundColor: UIColor.white.withAlphaComponent(0.85),
                     .paragraphStyle: paragrafo,
                 ]
             )
