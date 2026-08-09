@@ -164,6 +164,11 @@ function creaDb(dataDir) {
         .sort((a, b) => a.id - b.id)
         .map(normalizzaSerramento);
     },
+    // Tutti i serramenti di tutti i sopralluoghi, senza filtro: usato per
+    // l'esportazione del dataset foto (riconoscimento AI futuro).
+    listTuttiSerramenti() {
+      return stato.serramenti.map(normalizzaSerramento);
+    },
     getSerramento(id) {
       return normalizzaSerramento(stato.serramenti.find(w => w.id === Number(id)) || null);
     },
