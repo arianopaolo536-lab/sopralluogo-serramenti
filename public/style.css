@@ -82,7 +82,13 @@ body {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  background: rgba(255,255,255,.92);
+  /* Sfondo verde scuro (non bianco): la "I" del logo è bianca con solo un
+     filo di contorno grigio chiaro, su sfondo bianco/quasi bianco sparisce
+     quasi del tutto. Sul verde scuro risalta come si deve, insieme a Q e D. */
+  background: rgba(15,58,47,.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,.18);
   border-radius: 10px;
   padding: 5px 8px;
   box-shadow: 0 4px 14px rgba(0,0,0,.18);
@@ -322,7 +328,11 @@ input:focus, select:focus, textarea:focus {
   padding: 10px 18px;
   border-radius: 999px;
   font-size: .9rem;
-  z-index: 50;
+  /* Sopra a .modale (z-index: 100): il toast deve restare visibile anche
+     quando la modale "Aggiungi/Modifica serramento" è aperta, altrimenti
+     ogni messaggio (compresi gli avvisi sulla foto LiDAR) resta invisibile
+     dietro di essa senza che l'operatore se ne accorga. */
+  z-index: 200;
   box-shadow: 0 8px 24px rgba(0,0,0,.2);
 }
 

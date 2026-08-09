@@ -13,11 +13,14 @@ import ARKit
 //     dispositivo,                                 // es. "iPhone15,2 · iOS 18.0"
 //     attendibilita: "alta" | "media" | "bassa",    // qualitativa, derivata dalla confidenceMap reale
 //     confermataOperatore: true,
-//     punti: [{ profondita_m, confidence, metodo }] // dettaglio per ciascuno dei 4 punti
+//     punti: [{ profondita_m, confidence, metodo }], // dettaglio per ciascuno dei 4 punti
+//     fotoConMisureBase64                          // JPEG base64: fermo immagine + rettangolo/quote disegnati sopra (vedi VistaMisuraLidar.creaFotoConMisure)
 //   }>
 //
 // Nessuna di queste API tocca il backend Express/Render: il risultato viene
-// salvato dal JS esistente con lo stesso PATCH /api/serramenti/:id già in uso.
+// salvato dal JS esistente con lo stesso PATCH /api/serramenti/:id già in uso
+// (la fotoConMisureBase64 viene convertita in File lato JS e allegata come
+// "foto" nello stesso FormData, vedi public/app.js).
 @objc(MisuraLidarPlugin)
 public class MisuraLidarPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "MisuraLidarPlugin"

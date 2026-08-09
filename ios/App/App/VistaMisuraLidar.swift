@@ -2,6 +2,7 @@ import UIKit
 import ARKit
 import SceneKit
 import CoreVideo
+import CoreImage
 import simd
 
 // Modulo "Misura con LiDAR" — versione con campionamento reale di Scene Depth
@@ -33,6 +34,39 @@ import simd
 // spazio mondo con camera.transform. Il raycast su .estimatedPlane resta SOLO
 // come fallback per i frame/pixel in cui la depth map non è disponibile o non
 // è utilizzabile — non è mai il metodo primario.
+//
+// --- UI (agosto 2026) ---------------------------------------------------
+// Interfaccia ricostruita per aderire al mockup approvato ("Misura LiDAR"):
+// header scuro, pillola di stato LIVE/FREEZE, toolbar destra (Griglia /
+// Centro), pannello quote a tile, barra azioni in basso. Il "parallelismo"
+// (blocco lati paralleli) è stato rimosso su richiesta: ogni vertice si
+// trascina di nuovo in modo indipendente. Questa sezione tocca SOLO
+// presentazione/interazione: nessuna delle funzioni di calcolo/misura/
+// depth/freeze è stata modificata.
+
+/// Vista "passante": intercetta il tocco SOLO se cade su un suo sottoview
+/// realmente interattivo (es. un pulsante) — altrimenti lascia proseguire il
+/// tocco verso la sceneView sottostante. Usata per le card informative in
+/// basso, che altrimenti "rubano" i tocchi destinati ai vertici quando il
+/// serramento occupa gran parte dello schermo (un vertice può finire
+/// visivamente sotto una card).
+private final class VistaPassante: UIView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard let colpito = super.hitTest(point, with: event) else { return nil }
+        return colpito == self ? nil : colpito
+    }
+}
+
+/// Stessa logica di `VistaPassante`, per i contenitori realizzati con
+/// UIStackView (che di per sé non disegna nulla ma può comunque intercettare
+/// i tocchi nelle zone vuote/di spaziatura tra le card).
+private final class StackPassante: UIStackView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard let colpito = super.hitTest(point, with: event) else { return nil }
+        return colpito == self ? nil : colpito
+    }
+}
+
 final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDelegate {
 
     /// true se il dispositivo supporta realmente Scene Depth (non un check sul
@@ -44,14 +78,68 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
     var alCompletamento: (([String: Any]?) -> Void)?
 
     private let sceneView = ARSCNView()
-    /// Un solo popup (invece di 3 scritte fisse in cima allo schermo, che
-    /// disturbavano la mira sui vertici): mostra istruzioni/legenda/quote a
-    /// seconda del momento e sparisce da solo dopo qualche secondo di inattività.
+
+    // --- Header ---
+    private let headerView = UIView()
+    private let bottoneIndietro = UIButton(type: .system)
+    private let etichettaTitoloHeader = UILabel()
+    private let etichettaSottotitoloHeader = UILabel()
+    private let bottoneGuida = UIButton(type: .system)
+
+    // --- Pillola di stato LIVE/FREEZE + istruzione persistente ---
+    private let pillStato = VistaPassante()
+    private let puntinoStato = UIView()
+    private let etichettaStato = UILabel()
+    private let etichettaIstruzionePill = UILabel()
+
+    // --- Toolbar destra (Griglia / Centro) ---
+    private let toolbarDestra = StackPassante()
+    private let bottoneToolGriglia = UIButton(type: .system)
+    private let bottoneToolCentro = UIButton(type: .system)
+    private var grigliaAttiva = false
+    private var livelloGriglia: CAShapeLayer?
+
+    // --- Badge tecnici (Profondità / Attendibilità) ---
+    private let badgeProfonditaLabel = UILabel()
+    private let badgeAttendibilitaLabel = UILabel()
+
+    // --- Pannello quote (tile Larghezza / Altezza / Superficie / Attendibilità) ---
+    private let tileLarghezzaValore = UILabel()
+    private let tileAltezzaValore = UILabel()
+    private let tileSuperficieValore = UILabel()
+    private let tileAttendibilitaValore = UILabel()
+
+    // --- Stepper inferiore ---
+    private var puntiniStepper: [UIView] = []
+    private var etichetteStepper: [UILabel] = []
+
+    /// Contenitore verticale di tutte le card in basso (quote, azioni),
+    /// ancorato alla safe area inferiore.
+    private let stackInferiore = StackPassante()
+
+    /// Un solo popup (invece di scritte fisse sullo schermo, che disturbavano
+    /// la mira sui vertici): mostra messaggi transitori (errori, avvisi,
+    /// legenda iniziale) e sparisce da solo dopo qualche secondo di
+    /// inattività. È un vero pannello "a vetro" (blur nativo).
+    private let vetroPopup = UIVisualEffectView(effect: UIBlurEffect(style: .systemThinMaterialDark))
     private let etichettaPopup = UILabel()
+
     private let bottoneAnnulla = UIButton(type: .system)
     private let bottoneRipristina = UIButton(type: .system)
     private let bottoneConferma = UIButton(type: .system)
-    private let bottoneParallelo = UIButton(type: .system)
+
+    /// Verde brand QID (stesso --primary del sito, #1d6f5c), usato per gli
+    /// accenti "glass" (bordi, pulsante primario) coerenti col resto dell'app.
+    private let coloreBrand = UIColor(red: 0.114, green: 0.435, blue: 0.361, alpha: 1)
+    private let coloreBrandScuro = UIColor(red: 0.078, green: 0.314, blue: 0.259, alpha: 1)
+    /// Blu notte/antracite dell'header e delle card, rosso QID per
+    /// annulla/elimina, blu accento per lo stato FREEZE, verde acceso per il
+    /// contorno AR (più visibile del giallo precedente su vetri/muri chiari).
+    private let coloreSfondoHeader = UIColor(red: 0.043, green: 0.075, blue: 0.114, alpha: 1)
+    private let coloreCardScura = UIColor(red: 0.067, green: 0.098, blue: 0.137, alpha: 0.82)
+    private let coloreBluAccento = UIColor(red: 0.22, green: 0.51, blue: 0.86, alpha: 1)
+    private let coloreRossoQID = UIColor(red: 0.753, green: 0.224, blue: 0.169, alpha: 1)
+    private let coloreContornoAR = UIColor(red: 0.204, green: 0.780, blue: 0.549, alpha: 1)
 
     /// Un vertice misurato, con tutti i metadati richiesti per la tracciabilità
     /// (metodo usato, confidenza, profondità in metri quando disponibile).
@@ -74,6 +162,14 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
     /// SEMPRE questo, mai il frame live — è il fermo immagine che elimina il
     /// tremolio della camera in mano durante il posizionamento dei punti.
     private var frameCongelato: ARFrame?
+    /// Immagine a colori (capturedImage) del fotogramma congelato, già
+    /// convertita e raddrizzata NELL'ISTANTE STESSO del fermo immagine — non
+    /// riletta più tardi da frame.capturedImage, perché quel CVPixelBuffer
+    /// (diverso dalla depth map, che invece resta valida) può essere
+    /// riciclato da ARKit nel tempo in cui l'operatore trascina i vertici,
+    /// rendendo la lettura tardiva silenziosamente vuota/nulla. Usata solo
+    /// per generare la foto con le quote scritte sopra alla conferma.
+    private var immagineCongelata: UIImage?
     /// Contatore usato da mostraMessaggio per capire, quando scade il timer di
     /// auto-nascondi di UN messaggio, se nel frattempo non ne è già arrivato
     /// uno più recente (nel qual caso non deve nascondere nulla).
@@ -88,15 +184,6 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
     /// dito (come i "pin" di Mappe): così il dito non copre più il punto che
     /// si sta posizionando e si vede sempre dove sta andando a finire.
     private let scostamentoDito: CGFloat = 80
-
-    /// "Parallelismo" abilitabile/disabilitabile a scelta dell'operatore: a
-    /// differenza della vecchia rettifica automatica (che ricalcolava TUTTO il
-    /// rettangolo e lo faceva ruotare in modo imprevedibile), qui si muove SOLO
-    /// la coppia di vertici collegata a quello trascinato — lato alto insieme,
-    /// oppure lato basso insieme — traslandola in blocco così il lato resta
-    /// parallelo a se stesso. Flusso consigliato: prima i due vertici alti (col
-    /// parallelismo attivo restano allineati), poi i due bassi.
-    private var parallelismoAttivo = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -153,77 +240,533 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
         sceneView.session.run(config, options: [.resetTracking, .removeExistingAnchors])
     }
 
+    // MARK: - Overlay: assemblaggio dei componenti della nuova UI
+
     private func configuraOverlay() {
+        costruisciHeader()
+        costruisciPillStato()
+        costruisciToolbarDestra()
+        costruisciPopupTransitorio()
+        costruisciPannelloInferiore()
+    }
+
+    private func costruisciHeader() {
+        headerView.backgroundColor = coloreSfondoHeader
+        headerView.translatesAutoresizingMaskIntoConstraints = false
+
+        bottoneIndietro.setImage(UIImage(systemName: "chevron.left"), for: .normal)
+        bottoneIndietro.tintColor = .white
+        bottoneIndietro.addTarget(self, action: #selector(annulla), for: .touchUpInside)
+        bottoneIndietro.translatesAutoresizingMaskIntoConstraints = false
+
+        etichettaTitoloHeader.text = "Misura LiDAR"
+        etichettaTitoloHeader.font = .systemFont(ofSize: 17, weight: .bold)
+        etichettaTitoloHeader.textColor = .white
+        etichettaTitoloHeader.textAlignment = .center
+
+        etichettaSottotitoloHeader.text = "Posiziona i 4 vertici del serramento"
+        etichettaSottotitoloHeader.font = .systemFont(ofSize: 12, weight: .regular)
+        etichettaSottotitoloHeader.textColor = UIColor.white.withAlphaComponent(0.6)
+        etichettaSottotitoloHeader.textAlignment = .center
+
+        let stackTitoli = UIStackView(arrangedSubviews: [etichettaTitoloHeader, etichettaSottotitoloHeader])
+        stackTitoli.axis = .vertical
+        stackTitoli.spacing = 2
+        stackTitoli.alignment = .center
+        stackTitoli.translatesAutoresizingMaskIntoConstraints = false
+
+        bottoneGuida.setTitle("Guida", for: .normal)
+        bottoneGuida.setImage(UIImage(systemName: "questionmark.circle"), for: .normal)
+        bottoneGuida.tintColor = .white
+        bottoneGuida.setTitleColor(.white, for: .normal)
+        bottoneGuida.titleLabel?.font = .systemFont(ofSize: 13, weight: .semibold)
+        bottoneGuida.addTarget(self, action: #selector(mostraGuida), for: .touchUpInside)
+        bottoneGuida.translatesAutoresizingMaskIntoConstraints = false
+
+        headerView.addSubview(bottoneIndietro)
+        headerView.addSubview(stackTitoli)
+        headerView.addSubview(bottoneGuida)
+        view.addSubview(headerView)
+
+        NSLayoutConstraint.activate([
+            headerView.topAnchor.constraint(equalTo: view.topAnchor),
+            headerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            headerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            headerView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 64),
+
+            bottoneIndietro.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 12),
+            bottoneIndietro.bottomAnchor.constraint(equalTo: headerView.bottomAnchor, constant: -14),
+            bottoneIndietro.widthAnchor.constraint(equalToConstant: 30),
+            bottoneIndietro.heightAnchor.constraint(equalToConstant: 30),
+
+            stackTitoli.centerXAnchor.constraint(equalTo: headerView.centerXAnchor),
+            stackTitoli.bottomAnchor.constraint(equalTo: headerView.bottomAnchor, constant: -8),
+            stackTitoli.leadingAnchor.constraint(greaterThanOrEqualTo: bottoneIndietro.trailingAnchor, constant: 8),
+            stackTitoli.trailingAnchor.constraint(lessThanOrEqualTo: bottoneGuida.leadingAnchor, constant: -8),
+
+            bottoneGuida.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -12),
+            bottoneGuida.bottomAnchor.constraint(equalTo: headerView.bottomAnchor, constant: -14),
+        ])
+    }
+
+    @objc private func mostraGuida() {
+        let alert = UIAlertController(
+            title: "Come funziona",
+            message: "1. Inquadra il serramento e tocca il centro: l'immagine si ferma (FREEZE).\n2. Trascina i 4 vertici sugli angoli reali.\n3. Controlla le quote nel pannello e conferma la misura.\n\n🟢 Alta   🟡 Media   🟠 Bassa   🟣 Fallback raycast",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Ho capito", style: .default))
+        present(alert, animated: true)
+    }
+
+    private func costruisciPillStato() {
+        pillStato.backgroundColor = coloreCardScura
+        pillStato.layer.cornerRadius = 16
+        pillStato.layer.borderWidth = 1
+        pillStato.layer.borderColor = UIColor.white.withAlphaComponent(0.14).cgColor
+        pillStato.translatesAutoresizingMaskIntoConstraints = false
+
+        puntinoStato.layer.cornerRadius = 4
+        puntinoStato.translatesAutoresizingMaskIntoConstraints = false
+
+        etichettaStato.font = .systemFont(ofSize: 12, weight: .bold)
+        etichettaStato.textColor = .white
+
+        let rigaPill = UIStackView(arrangedSubviews: [puntinoStato, etichettaStato])
+        rigaPill.axis = .horizontal
+        rigaPill.spacing = 6
+        rigaPill.alignment = .center
+        rigaPill.translatesAutoresizingMaskIntoConstraints = false
+
+        pillStato.addSubview(rigaPill)
+        view.addSubview(pillStato)
+
+        etichettaIstruzionePill.font = .systemFont(ofSize: 11, weight: .medium)
+        etichettaIstruzionePill.textColor = UIColor.white.withAlphaComponent(0.75)
+        etichettaIstruzionePill.textAlignment = .center
+        etichettaIstruzionePill.numberOfLines = 2
+        etichettaIstruzionePill.translatesAutoresizingMaskIntoConstraints = false
+        etichettaIstruzionePill.text = "Tocca il centro del serramento per iniziare"
+        view.addSubview(etichettaIstruzionePill)
+
+        NSLayoutConstraint.activate([
+            pillStato.topAnchor.constraint(equalTo: headerView.bottomAnchor, constant: 10),
+            pillStato.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            pillStato.heightAnchor.constraint(equalToConstant: 32),
+
+            rigaPill.leadingAnchor.constraint(equalTo: pillStato.leadingAnchor, constant: 12),
+            rigaPill.trailingAnchor.constraint(equalTo: pillStato.trailingAnchor, constant: -12),
+            rigaPill.centerYAnchor.constraint(equalTo: pillStato.centerYAnchor),
+
+            puntinoStato.widthAnchor.constraint(equalToConstant: 8),
+            puntinoStato.heightAnchor.constraint(equalToConstant: 8),
+
+            etichettaIstruzionePill.topAnchor.constraint(equalTo: pillStato.bottomAnchor, constant: 6),
+            etichettaIstruzionePill.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            etichettaIstruzionePill.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 40),
+            etichettaIstruzionePill.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -40),
+        ])
+
+        aggiornaPillStato()
+    }
+
+    /// Aggiorna la pillola LIVE/FREEZE in base a `frameCongelato`: nessuna
+    /// nuova logica di stato, legge semplicemente lo stesso flag già usato dal
+    /// resto del modulo per decidere se il fotogramma è congelato o live.
+    private func aggiornaPillStato() {
+        if frameCongelato != nil {
+            etichettaStato.text = "FREEZE"
+            puntinoStato.backgroundColor = coloreBluAccento
+        } else {
+            etichettaStato.text = "LIVE"
+            puntinoStato.backgroundColor = .systemGreen
+        }
+    }
+
+    private func styleIconButton(_ bottone: UIButton) {
+        bottone.tintColor = .white
+        bottone.backgroundColor = UIColor.white.withAlphaComponent(0.12)
+        bottone.layer.cornerRadius = 20
+        bottone.translatesAutoresizingMaskIntoConstraints = false
+        bottone.widthAnchor.constraint(equalToConstant: 40).isActive = true
+        bottone.heightAnchor.constraint(equalToConstant: 40).isActive = true
+    }
+
+    private func wrapConDidascalia(_ bottone: UIButton, testo: String) -> UIStackView {
+        let didascalia = UILabel()
+        didascalia.text = testo
+        didascalia.font = .systemFont(ofSize: 10, weight: .semibold)
+        didascalia.textColor = UIColor.white.withAlphaComponent(0.85)
+        didascalia.textAlignment = .center
+        let stack = UIStackView(arrangedSubviews: [bottone, didascalia])
+        stack.axis = .vertical
+        stack.spacing = 4
+        stack.alignment = .center
+        return stack
+    }
+
+    private func costruisciToolbarDestra() {
+        styleIconButton(bottoneToolGriglia)
+        bottoneToolGriglia.setImage(UIImage(systemName: "grid"), for: .normal)
+        bottoneToolGriglia.addTarget(self, action: #selector(toggleGriglia), for: .touchUpInside)
+
+        styleIconButton(bottoneToolCentro)
+        bottoneToolCentro.setImage(UIImage(systemName: "scope"), for: .normal)
+        bottoneToolCentro.addTarget(self, action: #selector(evidenziaCentro), for: .touchUpInside)
+
+        toolbarDestra.axis = .vertical
+        toolbarDestra.spacing = 16
+        toolbarDestra.alignment = .center
+        toolbarDestra.translatesAutoresizingMaskIntoConstraints = false
+        toolbarDestra.addArrangedSubview(wrapConDidascalia(bottoneToolGriglia, testo: "Griglia"))
+        toolbarDestra.addArrangedSubview(wrapConDidascalia(bottoneToolCentro, testo: "Centro"))
+        view.addSubview(toolbarDestra)
+
+        NSLayoutConstraint.activate([
+            toolbarDestra.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -14),
+            toolbarDestra.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+        ])
+        // Nascosta finché non ci sono vertici da correggere: prima del primo
+        // tocco la schermata deve restare il più libera possibile per mirare
+        // al centro del serramento.
+        toolbarDestra.alpha = 0
+    }
+
+    /// Griglia dei terzi puramente decorativa (aiuto all'inquadratura): un
+    /// CAShapeLayer statico sopra la camera, nessun impatto su misure/depth.
+    @objc private func toggleGriglia() {
+        grigliaAttiva.toggle()
+        bottoneToolGriglia.backgroundColor = grigliaAttiva ? coloreBrand : UIColor.white.withAlphaComponent(0.12)
+        if grigliaAttiva {
+            disegnaGriglia()
+        } else {
+            livelloGriglia?.removeFromSuperlayer()
+            livelloGriglia = nil
+        }
+    }
+
+    private func disegnaGriglia() {
+        livelloGriglia?.removeFromSuperlayer()
+        let layer = CAShapeLayer()
+        let path = UIBezierPath()
+        let w = sceneView.bounds.width, h = sceneView.bounds.height
+        for i in 1...2 {
+            let x = w * CGFloat(i) / 3
+            path.move(to: CGPoint(x: x, y: 0)); path.addLine(to: CGPoint(x: x, y: h))
+            let y = h * CGFloat(i) / 3
+            path.move(to: CGPoint(x: 0, y: y)); path.addLine(to: CGPoint(x: w, y: y))
+        }
+        layer.path = path.cgPath
+        layer.strokeColor = UIColor.white.withAlphaComponent(0.35).cgColor
+        layer.lineWidth = 1
+        layer.fillColor = UIColor.clear.cgColor
+        sceneView.layer.addSublayer(layer)
+        livelloGriglia = layer
+    }
+
+    /// "Centro": evidenzia con un piccolo impulso visivo i vertici già
+    /// posizionati (nessuna nuova misura, solo un'animazione SceneKit).
+    @objc private func evidenziaCentro() {
+        guard !punti.isEmpty else {
+            mostraMessaggio("Posiziona prima i 4 vertici.")
+            return
+        }
+        for p in punti {
+            let impulso = SCNAction.sequence([.scale(to: 1.6, duration: 0.15), .scale(to: 1.0, duration: 0.15)])
+            p.nodo.runAction(impulso)
+        }
+    }
+
+    private func costruisciPopupTransitorio() {
+        vetroPopup.layer.cornerRadius = 14
+        vetroPopup.layer.masksToBounds = true
+        vetroPopup.layer.borderWidth = 1
+        vetroPopup.layer.borderColor = UIColor.white.withAlphaComponent(0.18).cgColor
+        vetroPopup.translatesAutoresizingMaskIntoConstraints = false
+        vetroPopup.alpha = 0
+        vetroPopup.isUserInteractionEnabled = false
+
+        let accentoPopup = UIView()
+        accentoPopup.backgroundColor = coloreBrand.withAlphaComponent(0.85)
+        accentoPopup.translatesAutoresizingMaskIntoConstraints = false
+
         etichettaPopup.textColor = .white
         etichettaPopup.numberOfLines = 6
-        etichettaPopup.font = .systemFont(ofSize: 14, weight: .semibold)
+        etichettaPopup.font = .systemFont(ofSize: 13, weight: .semibold)
         etichettaPopup.textAlignment = .center
-        etichettaPopup.backgroundColor = UIColor.black.withAlphaComponent(0.62)
-        etichettaPopup.layer.cornerRadius = 12
-        etichettaPopup.layer.masksToBounds = true
         etichettaPopup.translatesAutoresizingMaskIntoConstraints = false
-        etichettaPopup.alpha = 0
-        etichettaPopup.isUserInteractionEnabled = false
 
-        bottoneAnnulla.setTitle("Annulla", for: .normal)
+        vetroPopup.contentView.addSubview(accentoPopup)
+        vetroPopup.contentView.addSubview(etichettaPopup)
+        view.addSubview(vetroPopup)
+
+        NSLayoutConstraint.activate([
+            vetroPopup.topAnchor.constraint(equalTo: pillStato.bottomAnchor, constant: 36),
+            vetroPopup.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            vetroPopup.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
+            vetroPopup.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
+
+            accentoPopup.topAnchor.constraint(equalTo: vetroPopup.contentView.topAnchor),
+            accentoPopup.leadingAnchor.constraint(equalTo: vetroPopup.contentView.leadingAnchor),
+            accentoPopup.trailingAnchor.constraint(equalTo: vetroPopup.contentView.trailingAnchor),
+            accentoPopup.heightAnchor.constraint(equalToConstant: 3),
+
+            etichettaPopup.topAnchor.constraint(equalTo: accentoPopup.bottomAnchor, constant: 10),
+            etichettaPopup.leadingAnchor.constraint(equalTo: vetroPopup.contentView.leadingAnchor, constant: 14),
+            etichettaPopup.trailingAnchor.constraint(equalTo: vetroPopup.contentView.trailingAnchor, constant: -14),
+            etichettaPopup.bottomAnchor.constraint(equalTo: vetroPopup.contentView.bottomAnchor, constant: -10),
+        ])
+    }
+
+    private func creaCardScura() -> UIView {
+        // VistaPassante: lo sfondo della card non deve rubare il tocco a un
+        // vertice che si trovasse visivamente sotto di essa — solo i
+        // pulsanti/controlli reali al suo interno restano cliccabili.
+        let v = VistaPassante()
+        v.backgroundColor = coloreCardScura
+        v.layer.cornerRadius = 16
+        v.layer.borderWidth = 1
+        v.layer.borderColor = UIColor.white.withAlphaComponent(0.12).cgColor
+        v.translatesAutoresizingMaskIntoConstraints = false
+        return v
+    }
+
+    private func creaBadgePill(titolo: String, valoreLabel: UILabel) -> UIView {
+        let container = UIView()
+        container.backgroundColor = UIColor.white.withAlphaComponent(0.10)
+        container.layer.cornerRadius = 12
+        container.layer.borderWidth = 1
+        container.layer.borderColor = UIColor.white.withAlphaComponent(0.14).cgColor
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let etichettaTitolo = UILabel()
+        etichettaTitolo.text = titolo
+        etichettaTitolo.font = .systemFont(ofSize: 10, weight: .semibold)
+        etichettaTitolo.textColor = UIColor.white.withAlphaComponent(0.65)
+
+        valoreLabel.font = .systemFont(ofSize: 13, weight: .bold)
+        valoreLabel.textColor = .white
+        valoreLabel.text = "—"
+
+        let stack = UIStackView(arrangedSubviews: [etichettaTitolo, valoreLabel])
+        stack.axis = .vertical
+        stack.spacing = 1
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 6),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -6),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 10),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -10),
+        ])
+        return container
+    }
+
+    private func costruisciRigaBadge() -> UIView {
+        let containerProf = creaBadgePill(titolo: "PROFONDITÀ", valoreLabel: badgeProfonditaLabel)
+        let containerAtt = creaBadgePill(titolo: "ATTENDIBILITÀ", valoreLabel: badgeAttendibilitaLabel)
+        let riga = UIStackView(arrangedSubviews: [containerProf, containerAtt])
+        riga.axis = .horizontal
+        riga.spacing = 10
+        riga.distribution = .fillEqually
+        riga.translatesAutoresizingMaskIntoConstraints = false
+        return riga
+    }
+
+    private func creaMetricTile(titolo: String, valoreLabel: UILabel) -> UIView {
+        let container = UIView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        valoreLabel.font = .systemFont(ofSize: 18, weight: .bold)
+        valoreLabel.textColor = .white
+        valoreLabel.textAlignment = .center
+        valoreLabel.adjustsFontSizeToFitWidth = true
+        valoreLabel.minimumScaleFactor = 0.6
+        valoreLabel.text = "—"
+
+        let etichetta = UILabel()
+        etichetta.text = titolo
+        etichetta.font = .systemFont(ofSize: 10, weight: .semibold)
+        etichetta.textColor = UIColor.white.withAlphaComponent(0.6)
+        etichetta.textAlignment = .center
+
+        let stack = UIStackView(arrangedSubviews: [valoreLabel, etichetta])
+        stack.axis = .vertical
+        stack.spacing = 2
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: container.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+        ])
+        return container
+    }
+
+    private func costruisciPannelloQuote() -> UIView {
+        let card = creaCardScura()
+        let tileL = creaMetricTile(titolo: "LARGHEZZA", valoreLabel: tileLarghezzaValore)
+        let tileH = creaMetricTile(titolo: "ALTEZZA", valoreLabel: tileAltezzaValore)
+        let tileS = creaMetricTile(titolo: "SUPERFICIE", valoreLabel: tileSuperficieValore)
+        let tileA = creaMetricTile(titolo: "ATTENDIBILITÀ", valoreLabel: tileAttendibilitaValore)
+        let riga = UIStackView(arrangedSubviews: [tileL, tileH, tileS, tileA])
+        riga.axis = .horizontal
+        riga.distribution = .fillEqually
+        riga.spacing = 6
+        riga.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(riga)
+        NSLayoutConstraint.activate([
+            riga.topAnchor.constraint(equalTo: card.topAnchor, constant: 12),
+            riga.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
+            riga.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 10),
+            riga.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -10),
+        ])
+        return card
+    }
+
+    private func costruisciBarraAzioni() -> UIView {
+        bottoneAnnulla.setTitle("🗑 Cancella", for: .normal)
         bottoneAnnulla.setTitleColor(.white, for: .normal)
-        bottoneAnnulla.backgroundColor = UIColor.white.withAlphaComponent(0.18)
+        bottoneAnnulla.backgroundColor = coloreRossoQID.withAlphaComponent(0.85)
         bottoneAnnulla.layer.cornerRadius = 10
         bottoneAnnulla.addTarget(self, action: #selector(annulla), for: .touchUpInside)
 
-        bottoneRipristina.setTitle("Ripristina", for: .normal)
+        bottoneRipristina.setTitle("🔄 Reset punti", for: .normal)
         bottoneRipristina.setTitleColor(.white, for: .normal)
-        bottoneRipristina.backgroundColor = UIColor.white.withAlphaComponent(0.18)
+        bottoneRipristina.backgroundColor = UIColor.white.withAlphaComponent(0.14)
         bottoneRipristina.layer.cornerRadius = 10
+        bottoneRipristina.layer.borderWidth = 1
+        bottoneRipristina.layer.borderColor = UIColor.white.withAlphaComponent(0.3).cgColor
         bottoneRipristina.addTarget(self, action: #selector(ripristinaPunti), for: .touchUpInside)
 
-        bottoneConferma.setTitle("Fine misura", for: .normal)
+        bottoneConferma.setTitle("✓ Conferma misura", for: .normal)
         bottoneConferma.setTitleColor(.white, for: .normal)
-        bottoneConferma.backgroundColor = UIColor(red: 0.114, green: 0.435, blue: 0.361, alpha: 1) // verde brand
-        bottoneConferma.layer.cornerRadius = 10
+        bottoneConferma.layer.cornerRadius = 12
         bottoneConferma.isEnabled = false
         bottoneConferma.alpha = 0.4
         bottoneConferma.addTarget(self, action: #selector(conferma), for: .touchUpInside)
+        applicaGradienteBrand(a: bottoneConferma)
 
-        bottoneParallelo.layer.cornerRadius = 10
-        bottoneParallelo.addTarget(self, action: #selector(toggleParallelismo), for: .touchUpInside)
-        aggiornaAspettoBottoneParallelo()
-
-        let barraBottoni = UIStackView(arrangedSubviews: [bottoneAnnulla, bottoneRipristina, bottoneConferma])
-        barraBottoni.axis = .horizontal
-        barraBottoni.distribution = .fillEqually
-        barraBottoni.spacing = 8
-
-        for bottone in [bottoneAnnulla, bottoneRipristina, bottoneConferma, bottoneParallelo] {
+        for bottone in [bottoneAnnulla, bottoneRipristina, bottoneConferma] {
             bottone.titleLabel?.font = .systemFont(ofSize: 14, weight: .semibold)
             bottone.titleLabel?.adjustsFontSizeToFitWidth = true
-            bottone.titleLabel?.minimumScaleFactor = 0.6
+            bottone.titleLabel?.minimumScaleFactor = 0.7
         }
+        bottoneAnnulla.translatesAutoresizingMaskIntoConstraints = false
+        bottoneRipristina.translatesAutoresizingMaskIntoConstraints = false
+        bottoneConferma.translatesAutoresizingMaskIntoConstraints = false
+        bottoneAnnulla.heightAnchor.constraint(equalToConstant: 46).isActive = true
+        bottoneRipristina.heightAnchor.constraint(equalToConstant: 46).isActive = true
+        bottoneConferma.heightAnchor.constraint(equalToConstant: 54).isActive = true
 
-        // Tutti i controlli in basso (niente più scritte fisse in cima che
-        // disturbano la mira sui vertici durante la misurazione): il tasto
-        // parallelismo sopra, i 3 pulsanti principali sotto.
-        let barraControlli = UIStackView(arrangedSubviews: [bottoneParallelo, barraBottoni])
-        barraControlli.axis = .vertical
-        barraControlli.spacing = 8
-        barraControlli.translatesAutoresizingMaskIntoConstraints = false
+        let rigaSecondarie = UIStackView(arrangedSubviews: [bottoneAnnulla, bottoneRipristina])
+        rigaSecondarie.axis = .horizontal
+        rigaSecondarie.spacing = 8
+        rigaSecondarie.distribution = .fillEqually
 
-        view.addSubview(etichettaPopup)
-        view.addSubview(barraControlli)
+        let stack = UIStackView(arrangedSubviews: [rigaSecondarie, bottoneConferma])
+        stack.axis = .vertical
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        return stack
+    }
+
+    private func costruisciStepper() -> UIView {
+        let titoli = ["1 Inquadra", "2 Ferma", "3 Posiziona", "4 Conferma"]
+        var voci: [UIView] = []
+        for titolo in titoli {
+            let punto = UIView()
+            punto.layer.cornerRadius = 4
+            punto.backgroundColor = UIColor.white.withAlphaComponent(0.25)
+            punto.translatesAutoresizingMaskIntoConstraints = false
+            punto.widthAnchor.constraint(equalToConstant: 8).isActive = true
+            punto.heightAnchor.constraint(equalToConstant: 8).isActive = true
+
+            let etichetta = UILabel()
+            etichetta.text = titolo
+            etichetta.font = .systemFont(ofSize: 9, weight: .semibold)
+            etichetta.textColor = UIColor.white.withAlphaComponent(0.5)
+            etichetta.textAlignment = .center
+
+            let colonna = UIStackView(arrangedSubviews: [punto, etichetta])
+            colonna.axis = .vertical
+            colonna.spacing = 3
+            colonna.alignment = .center
+
+            puntiniStepper.append(punto)
+            etichetteStepper.append(etichetta)
+            voci.append(colonna)
+        }
+        let riga = UIStackView(arrangedSubviews: voci)
+        riga.axis = .horizontal
+        riga.distribution = .fillEqually
+        riga.translatesAutoresizingMaskIntoConstraints = false
+        aggiornaStepper()
+        return riga
+    }
+
+    /// Evidenzia lo step corrente leggendo solo stato già esistente
+    /// (frameCongelato, numero di punti): nessuna nuova macchina a stati.
+    private func aggiornaStepper() {
+        guard puntiniStepper.count == 4, etichetteStepper.count == 4 else { return }
+        let stato: [Bool] = [true, frameCongelato != nil, punti.count == 4, false]
+        for (i, attivo) in stato.enumerated() {
+            puntiniStepper[i].backgroundColor = attivo ? coloreBrand : UIColor.white.withAlphaComponent(0.25)
+            etichetteStepper[i].textColor = attivo ? .white : UIColor.white.withAlphaComponent(0.5)
+        }
+    }
+
+    // Nota: la riga badge (Profondità/Attendibilità) e lo stepper del mockup
+    // sono stati tolti dal pannello reale — l'Attendibilità è già nella tile
+    // del pannello quote, e ogni card in più riduceva lo spazio libero per
+    // mirare/trascinare i vertici sull'inquadratura reale ("la schermata è
+    // troppo piena, non riesco a puntare"). Le funzioni restano definite ma
+    // non vengono più aggiunte allo stack visibile.
+    private func costruisciPannelloInferiore() {
+        let pannelloQuote = costruisciPannelloQuote()
+        let barraAzioni = costruisciBarraAzioni()
+
+        stackInferiore.axis = .vertical
+        stackInferiore.spacing = 10
+        stackInferiore.translatesAutoresizingMaskIntoConstraints = false
+        stackInferiore.addArrangedSubview(pannelloQuote)
+        stackInferiore.addArrangedSubview(barraAzioni)
+        view.addSubview(stackInferiore)
 
         NSLayoutConstraint.activate([
-            etichettaPopup.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
-            etichettaPopup.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            etichettaPopup.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
-            etichettaPopup.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
-
-            barraControlli.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            barraControlli.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            barraControlli.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
-
-            bottoneParallelo.heightAnchor.constraint(equalToConstant: 40),
-            barraBottoni.heightAnchor.constraint(equalToConstant: 46),
+            stackInferiore.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            stackInferiore.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            stackInferiore.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -10),
         ])
+        // Nascosto finché non esiste un rettangolo da correggere: prima del
+        // primo tocco la schermata resta libera per mirare al centro.
+        stackInferiore.alpha = 0
+    }
+
+    /// Applica al pulsante primario un gradiente verde brand (chiaro→scuro),
+    /// come il `.btn-primary` del sito, invece di un verde piatto. Il layer
+    /// viene tenuto sincronizzato con le dimensioni reali del pulsante in
+    /// `viewDidLayoutSubviews()` (qui, a configurazione, il pulsante non ha
+    /// ancora una dimensione definitiva).
+    private func applicaGradienteBrand(a bottone: UIButton) {
+        let gradiente = CAGradientLayer()
+        gradiente.colors = [coloreBrand.cgColor, coloreBrandScuro.cgColor]
+        gradiente.startPoint = CGPoint(x: 0, y: 0)
+        gradiente.endPoint = CGPoint(x: 1, y: 1)
+        gradiente.cornerRadius = bottone.layer.cornerRadius
+        gradiente.name = "gradienteBrand"
+        bottone.layer.insertSublayer(gradiente, at: 0)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        if let gradiente = bottoneConferma.layer.sublayers?.first(where: { $0.name == "gradienteBrand" }) {
+            gradiente.frame = bottoneConferma.bounds
+        }
+        if grigliaAttiva {
+            disegnaGriglia()
+        }
     }
 
     private func configuraGesture() {
@@ -254,8 +797,27 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
             return
         }
         frameCongelato = frame
+        // Cattura e converte SUBITO l'immagine a colori (vedi commento sulla
+        // proprietà immagineCongelata): è l'unico momento in cui è certo che
+        // il CVPixelBuffer di frame.capturedImage sia ancora valido.
+        immagineCongelata = creaImmagineDrittaDaFrame(frame)
         sceneView.session.pause()
+        aggiornaPillStato()
         creaRettangoloSimmetrico(centro: misurato, frame: frame)
+    }
+
+    /// Converte frame.capturedImage (CVPixelBuffer nell'orientamento nativo
+    /// del sensore, landscape) in una UIImage "dritta" come la vede
+    /// l'operatore in portrait — stessa convenzione già usata altrove in
+    /// questo file per l'orientamento camera/schermo.
+    private func creaImmagineDrittaDaFrame(_ frame: ARFrame) -> UIImage? {
+        let immagineCI = CIImage(cvPixelBuffer: frame.capturedImage).oriented(.right)
+        let contesto = CIContext()
+        guard let cgImage = contesto.createCGImage(immagineCI, from: immagineCI.extent) else {
+            print("⚠️ creaImmagineDrittaDaFrame: createCGImage ha restituito nil")
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
     }
 
     /// Crea un rettangolo simmetrico (angoli retti, lati uguali a coppie)
@@ -263,9 +825,20 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
     /// camera in quel momento. È solo un punto di partenza: l'operatore lo
     /// allinea al vero serramento trascinando ciascun angolo.
     private func creaRettangoloSimmetrico(centro: PuntoMisurato, frame: ARFrame) {
-        let trasformCamera = frame.camera.transform
-        let asseDestro = simd_normalize(simd_float3(trasformCamera.columns.0.x, trasformCamera.columns.0.y, trasformCamera.columns.0.z))
-        let asseSu = simd_normalize(simd_float3(trasformCamera.columns.1.x, trasformCamera.columns.1.y, trasformCamera.columns.1.z))
+        // IMPORTANTE: si usa il pointOfView della SCNView (non
+        // frame.camera.transform) per "destro"/"su". frame.camera.transform è
+        // riferito al sensore della fotocamera nel suo orientamento nativo
+        // (landscape), NON all'orientamento a schermo (portrait) con cui si
+        // tiene davvero il telefono: usarlo direttamente faceva partire il
+        // rettangolo ruotato di 90° rispetto allo schermo, così L e H
+        // finivano scambiate una volta che l'operatore allineava i 4 angoli
+        // alla vera finestra. Il pointOfView invece è già coerente con lo
+        // schermo (è lo stesso transform usato per proiettare i punti nel
+        // trascinamento), quindi "destro"/"su" corrispondono davvero a
+        // destra/su visti sullo schermo.
+        let trasformVista = (sceneView.pointOfView?.simdWorldTransform) ?? frame.camera.transform
+        let asseDestro = simd_normalize(simd_float3(trasformVista.columns.0.x, trasformVista.columns.0.y, trasformVista.columns.0.z))
+        let asseSu = simd_normalize(simd_float3(trasformVista.columns.1.x, trasformVista.columns.1.y, trasformVista.columns.1.z))
         let centroPos = simd_float3(centro.posizione.x, centro.posizione.y, centro.posizione.z)
 
         // Dimensioni di partenza (0.8 x 1.2 m): una finestra "media" plausibile,
@@ -281,7 +854,8 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
         ]
 
         punti.forEach { $0.nodo.removeFromParentNode() }
-        punti = offsetAngoli.map { (ox, oy) in
+        punti = offsetAngoli.enumerated().map { (indice, coppia) in
+            let (ox, oy) = coppia
             let posizioneMondo = centroPos + asseDestro * (ox * mezzaLarghezza) + asseSu * (oy * mezzaAltezza)
             var pm = PuntoMisurato(
                 posizione: SCNVector3(posizioneMondo.x, posizioneMondo.y, posizioneMondo.z),
@@ -290,14 +864,22 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
                 metodo: centro.metodo,
                 nodo: SCNNode()
             )
-            pm.nodo = creaNodoPunto(per: pm)
+            pm.nodo = creaNodoPunto(per: pm, indice: indice)
             sceneView.scene.rootNode.addChildNode(pm.nodo)
             return pm
         }
 
         bottoneConferma.isEnabled = true
         bottoneConferma.alpha = 1
-        // ridisegnaLineeECalcola() mostra subito le quote nel popup: è già
+        etichettaIstruzionePill.text = "Trascina i 4 angoli per allinearli al serramento"
+        aggiornaStepper()
+        // Ora che il rettangolo esiste, i pannelli/toolbar tornano visibili
+        // (erano nascosti per lasciare lo schermo libero durante la mira).
+        UIView.animate(withDuration: 0.25) {
+            self.stackInferiore.alpha = 1
+            self.toolbarDestra.alpha = 1
+        }
+        // ridisegnaLineeECalcola() aggiorna subito il pannello quote: è già
         // un'indicazione sufficiente che da qui si corregge trascinando.
         ridisegnaLineeECalcola()
     }
@@ -326,6 +908,14 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
                 // conferma visivamente quale vertice si sta trascinando anche
                 // se il dito lo copre nell'istante del tocco.
                 punti[indice].nodo.runAction(.scale(to: 1.4, duration: 0.1))
+                // Schermo libero durante il trascinamento vero e proprio: i
+                // pannelli/toolbar tornano dopo il rilascio del dito (vedi
+                // .ended/.cancelled più sotto).
+                UIView.animate(withDuration: 0.12) {
+                    self.stackInferiore.alpha = 0
+                    self.toolbarDestra.alpha = 0
+                    self.etichettaIstruzionePill.alpha = 0
+                }
             }
         case .changed:
             guard let indice = indiceInTrascinamento, indice < punti.count else { return }
@@ -334,30 +924,25 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
             // resta visibile più su, spostato della stessa quantità.
             let posizioneCampionamento = CGPoint(x: posizione.x, y: posizione.y - scostamentoDito)
             guard let misurato = puntoDaSchermo(posizioneCampionamento) else { return }
-            if parallelismoAttivo, indice == 2 || indice == 3 {
-                // Lato basso: con il lato alto già sistemato, qui conta solo
-                // "quanto in basso" (altezza) — la posizione orizzontale/di
-                // profondità resta agganciata al vertice alto corrispondente,
-                // così il lato basso è sempre parallelo a quello alto e tutti
-                // gli angoli restano a 90°.
-                aggiornaLatoBassoVincolatoAllAlto(indiceTrascinato: indice, misurato: misurato)
-            } else {
-                let posizionePrecedente = punti[indice].posizione
-                aggiornaPunto(indice, con: misurato)
-                if parallelismoAttivo, let partner = indicePartnerParallelo(indice) {
-                    let delta = SCNVector3(
-                        misurato.posizione.x - posizionePrecedente.x,
-                        misurato.posizione.y - posizionePrecedente.y,
-                        misurato.posizione.z - posizionePrecedente.z
-                    )
-                    traslaPunto(partner, delta: delta)
-                }
-            }
+            // Ogni vertice si trascina in modo indipendente (il parallelismo
+            // guidato è stato rimosso su richiesta): nessun vincolo tra lato
+            // alto e lato basso, l'operatore allinea i 4 angoli liberamente.
+            aggiornaPunto(indice, con: misurato)
         case .ended, .cancelled:
             // Il punto "si riappoggia" (torna alla dimensione normale) quando
             // si solleva il dito.
             if let indice = indiceInTrascinamento, indice < punti.count {
                 punti[indice].nodo.runAction(.scale(to: 1.0, duration: 0.15))
+            }
+            // Dito sollevato: i pannelli riappaiono (solo se il rettangolo
+            // esiste ancora — a riposo restano comunque nascosti prima del
+            // primo tocco).
+            UIView.animate(withDuration: 0.2) {
+                self.etichettaIstruzionePill.alpha = 1
+                if !self.punti.isEmpty {
+                    self.stackInferiore.alpha = 1
+                    self.toolbarDestra.alpha = 1
+                }
             }
             indiceInTrascinamento = nil
         default:
@@ -504,7 +1089,7 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
         let nodoEsistente = punti[indice].nodo
         nodoEsistente.position = SCNVector3(misurato.posizione.x, misurato.posizione.y, misurato.posizione.z)
         nodoEsistente.childNodes.forEach { $0.removeFromParentNode() }
-        aggiornaAspettoNodo(nodoEsistente, per: misurato)
+        aggiornaAspettoNodo(nodoEsistente, per: misurato, indice: indice)
         punti[indice].posizione = misurato.posizione
         punti[indice].profonditaM = misurato.profonditaM
         punti[indice].confidence = misurato.confidence
@@ -523,7 +1108,21 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
         // poter ri-tentare con un'inquadratura diversa.
         if frameCongelato != nil {
             frameCongelato = nil
+            immagineCongelata = nil
             avviaSessioneAR()
+        }
+        tileLarghezzaValore.text = "—"
+        tileAltezzaValore.text = "—"
+        tileSuperficieValore.text = "—"
+        tileAttendibilitaValore.text = "—"
+        badgeProfonditaLabel.text = "—"
+        badgeAttendibilitaLabel.text = "—"
+        etichettaIstruzionePill.text = "Tocca il centro del serramento per iniziare"
+        aggiornaPillStato()
+        aggiornaStepper()
+        UIView.animate(withDuration: 0.2) {
+            self.stackInferiore.alpha = 0
+            self.toolbarDestra.alpha = 0
         }
         mostraMessaggio(
             "Tocca il centro approssimativo del serramento: l'immagine si ferma e comparirà un rettangolo da correggere trascinando i 4 angoli.",
@@ -558,24 +1157,25 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
         }
     }
 
-    private func creaNodoPunto(per misurato: PuntoMisurato) -> SCNNode {
-        // Sfera ben visibile: la tolleranza di trascinamento è comunque basata
-        // sulla distanza sullo schermo (non sulla geometria), quindi qui conta
-        // soprattutto la visibilità, non la dimensione del bersaglio.
+    /// Sfera colorata secondo la qualità del punto (invariato) + etichetta 3D
+    /// col NUMERO del vertice (1-4), non più con la lettera di qualità: nel
+    /// nuovo pannello quote la qualità si legge già dal colore/dai badge, il
+    /// numero aiuta a capire "quale angolo è questo" mentre si trascina.
+    private func creaNodoPunto(per misurato: PuntoMisurato, indice: Int) -> SCNNode {
         let sfera = SCNSphere(radius: 0.026)
         sfera.firstMaterial?.diffuse.contents = coloreQualita(misurato)
         sfera.firstMaterial?.emission.contents = coloreQualita(misurato)
         let nodo = SCNNode(geometry: sfera)
         nodo.position = misurato.posizione
         nodo.renderingOrder = 20
-        aggiungiEtichetta3D(letteraQualita(misurato), colore: coloreQualita(misurato), a: nodo)
+        aggiungiEtichetta3D("\(indice + 1)", colore: coloreQualita(misurato), a: nodo)
         return nodo
     }
 
-    private func aggiornaAspettoNodo(_ nodo: SCNNode, per misurato: PuntoMisurato) {
+    private func aggiornaAspettoNodo(_ nodo: SCNNode, per misurato: PuntoMisurato, indice: Int) {
         (nodo.geometry as? SCNSphere)?.firstMaterial?.diffuse.contents = coloreQualita(misurato)
         (nodo.geometry as? SCNSphere)?.firstMaterial?.emission.contents = coloreQualita(misurato)
-        aggiungiEtichetta3D(letteraQualita(misurato), colore: coloreQualita(misurato), a: nodo)
+        aggiungiEtichetta3D("\(indice + 1)", colore: coloreQualita(misurato), a: nodo)
     }
 
     private func aggiungiEtichetta3D(_ testo: String, colore: UIColor, a nodoGenitore: SCNNode) {
@@ -606,18 +1206,34 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
         let altezzaM = (distanza(posizioni[0], posizioni[3]) + distanza(posizioni[1], posizioni[2])) / 2
         let superficieM2 = larghezzaM * altezzaM
 
-        let riepilogoPunti = punti.enumerated().map { i, p in "P\(i + 1)=\(letteraQualita(p))" }.joined(separator: "  ")
-        let testoQuote = String(
-            format: "L = %.0f mm   H = %.0f mm\nSuperficie = %.2f m²\n(MISURA INDICATIVA — DA VERIFICARE)\n%@",
-            larghezzaM * 1000, altezzaM * 1000, superficieM2, riepilogoPunti
-        )
-        // Ogni aggiornamento (durante il trascinamento) fa comparire/rimanere
-        // visibile il popup; 1.8s dopo l'ultimo aggiornamento (cioè quando si
-        // smette di toccare) sparisce da solo, lasciando la vista libera.
-        mostraMessaggio(testoQuote, autoNascondiDopo: 1.8)
+        aggiornaPannelliInformativi(larghezzaM: larghezzaM, altezzaM: altezzaM, superficieM2: superficieM2)
 
         nodoLinee = disegnaRettangolo(posizioni)
         if let linee = nodoLinee { sceneView.scene.rootNode.addChildNode(linee) }
+    }
+
+    /// Aggiorna SOLO la presentazione (tile quote, badge, stepper) con i
+    /// valori già calcolati da `ridisegnaLineeECalcola`: non esegue alcun
+    /// nuovo calcolo di misura, sostituisce semplicemente il vecchio popup di
+    /// testo con i pannelli persistenti del mockup.
+    private func aggiornaPannelliInformativi(larghezzaM: Float, altezzaM: Float, superficieM2: Float) {
+        tileLarghezzaValore.text = String(format: "%.0f mm", larghezzaM * 1000)
+        tileAltezzaValore.text = String(format: "%.0f mm", altezzaM * 1000)
+        tileSuperficieValore.text = String(format: "%.2f m²", superficieM2)
+
+        let attendibilita = attendibilitaComplessiva()
+        tileAttendibilitaValore.text = attendibilita.capitalized
+        badgeAttendibilitaLabel.text = attendibilita.capitalized
+
+        let profonditaDisponibili = punti.compactMap { $0.profonditaM }
+        if !profonditaDisponibili.isEmpty {
+            let media = profonditaDisponibili.reduce(0, +) / Double(profonditaDisponibili.count)
+            badgeProfonditaLabel.text = String(format: "%.2f m", media)
+        } else {
+            badgeProfonditaLabel.text = "—"
+        }
+
+        aggiornaStepper()
     }
 
     private func distanza(_ a: SCNVector3, _ b: SCNVector3) -> Float {
@@ -630,13 +1246,15 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
     /// sposta in modo diretto e indipendente, senza far "ruotare" il resto
     /// della forma. Contorno con cilindri sottili (ben visibili, a differenza
     /// delle semplici linee di SceneKit che restano sempre molto sottili) più
-    /// una faccia semitrasparente che riempie l'area.
+    /// una faccia semitrasparente che riempie l'area. Verde QID (invece del
+    /// precedente giallo) per coerenza con la nuova UI — puro colore, zero
+    /// effetto sui calcoli.
     private func disegnaRettangolo(_ vertici: [SCNVector3]) -> SCNNode {
         let contenitore = SCNNode()
         for i in 0..<vertici.count {
             let a = vertici[i]
             let b = vertici[(i + 1) % vertici.count]
-            contenitore.addChildNode(cilindroTra(a, b, raggio: 0.007, colore: .systemYellow))
+            contenitore.addChildNode(cilindroTra(a, b, raggio: 0.007, colore: coloreContornoAR))
         }
         contenitore.addChildNode(creaFacciaSemitrasparente(vertici))
         return contenitore
@@ -693,7 +1311,7 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
         let elemento = SCNGeometryElement(indices: indici, primitiveType: .triangles)
         let geometria = SCNGeometry(sources: [sorgente], elements: [elemento])
         let materiale = SCNMaterial()
-        materiale.diffuse.contents = UIColor.systemYellow.withAlphaComponent(0.28)
+        materiale.diffuse.contents = coloreContornoAR.withAlphaComponent(0.24)
         materiale.isDoubleSided = true
         materiale.lightingModel = .constant
         // Impostazioni esplicite di alpha-blend: senza queste, su alcuni
@@ -742,13 +1360,13 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
         generazioneMessaggio += 1
         let generazioneCorrente = generazioneMessaggio
         UIView.animate(withDuration: 0.15) {
-            self.etichettaPopup.alpha = 1
+            self.vetroPopup.alpha = 1
         }
         guard secondi > 0 else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + secondi) { [weak self] in
             guard let self = self, self.generazioneMessaggio == generazioneCorrente else { return }
             UIView.animate(withDuration: 0.3) {
-                self.etichettaPopup.alpha = 0
+                self.vetroPopup.alpha = 0
             }
         }
     }
@@ -759,128 +1377,113 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
         alCompletamento?(nil)
     }
 
-    /// Attiva/disattiva il parallelismo: quando attivo, muovere un vertice
-    /// trascina con sé (in blocco, stessa traslazione) il vertice abbinato
-    /// sullo stesso lato, così quel lato resta parallelo a se stesso invece di
-    /// doverlo allineare a mano punto per punto. Le finestre sono quasi sempre
-    /// a squadro, quindi allineare prima i due vertici alti e poi i due bassi
-    /// con questo aiuto attivo è in genere il modo più rapido di procedere.
-    @objc private func toggleParallelismo() {
-        parallelismoAttivo.toggle()
-        aggiornaAspettoBottoneParallelo()
-        mostraMessaggio(
-            parallelismoAttivo
-                ? "Parallelismo ON: sposta un vertice, quello abbinato sullo stesso lato lo segue. Fai prima i due alti, poi i due bassi."
-                : "Parallelismo OFF: ogni vertice si muove da solo."
+    // MARK: - Foto della misurazione con le quote scritte sopra
+
+    /// Disegna sopra l'immagine CONGELATA (catturata subito al fermo
+    /// immagine, vedi `immagineCongelata`) il rettangolo dei 4 vertici + le
+    /// quote, per ottenere una foto "prova" della misurazione da allegare al
+    /// serramento. Larghezza/altezza/superficie sono passate già calcolate da
+    /// `conferma()` (stessa formula, nessun ricalcolo): questa funzione tocca
+    /// solo la resa grafica.
+    private func creaFotoConMisure(larghezzaM: Float, altezzaM: Float, superficieM2: Float) -> Data? {
+        guard let frame = frameCongelato, let immagineBase = immagineCongelata, punti.count == 4 else {
+            print("⚠️ creaFotoConMisure: frameCongelato==nil: \(frameCongelato == nil), immagineCongelata==nil: \(immagineCongelata == nil), punti: \(punti.count)")
+            return nil
+        }
+
+        // Riduce la risoluzione (lato massimo 1600px) prima di disegnare e
+        // codificare: la risoluzione nativa della capturedImage può essere
+        // grande, e una stringa base64 troppo pesante rischia di rallentare
+        // o inceppare il trasferimento nativo->JS attraverso il bridge
+        // Capacitor. I 4 vertici restano comunque proiettati correttamente a
+        // QUALSIASI dimensione: projectPoint(viewportSize:) è pensato apposta
+        // per essere indipendente dalla risoluzione scelta.
+        let latoMassimo: CGFloat = 1600
+        let fattoreScala = min(1, latoMassimo / max(immagineBase.size.width, immagineBase.size.height))
+        let viewportSize = CGSize(
+            width: (immagineBase.size.width * fattoreScala).rounded(),
+            height: (immagineBase.size.height * fattoreScala).rounded()
         )
-    }
+        guard viewportSize.width > 0, viewportSize.height > 0 else {
+            print("⚠️ creaFotoConMisure: viewportSize non valido")
+            return nil
+        }
 
-    private func aggiornaAspettoBottoneParallelo() {
-        if parallelismoAttivo {
-            bottoneParallelo.setTitle("🔒 Parallelismo: ON", for: .normal)
-            bottoneParallelo.setTitleColor(.white, for: .normal)
-            bottoneParallelo.backgroundColor = UIColor(red: 0.114, green: 0.435, blue: 0.361, alpha: 1) // verde brand
+        // scale = 1 esplicito: senza questo UIGraphicsImageRenderer userebbe
+        // lo scale factor dello schermo (2x/3x), disallineando le coordinate
+        // disegnate qui sotto (calcolate in "pixel immagine", non in punti).
+        let formato = UIGraphicsImageRendererFormat()
+        formato.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: viewportSize, format: formato)
+
+        // Riproietta i 4 vertici (stesso frame, stessa camera) nello spazio
+        // pixel di QUESTA immagine (già alla risoluzione ridotta):
+        // ARCamera.projectPoint è l'API pensata apposta per riportare un
+        // punto 3D su una foto già scattata, dato l'orientamento e la
+        // dimensione della foto stessa — qualunque essa sia.
+        let puntiSchermo: [CGPoint] = punti.map { p in
+            frame.camera.projectPoint(
+                simd_float3(p.nodo.position.x, p.nodo.position.y, p.nodo.position.z),
+                orientation: .portrait,
+                viewportSize: viewportSize
+            )
+        }
+
+        let immagineFinale = renderer.image { ctx in
+            // draw(in:) invece di draw(at:): ridimensiona l'immagine sorgente
+            // (a piena risoluzione) dentro il canvas più piccolo.
+            immagineBase.draw(in: CGRect(origin: .zero, size: viewportSize))
+            let cg = ctx.cgContext
+
+            cg.setLineWidth(4)
+            cg.setStrokeColor(coloreContornoAR.cgColor)
+            cg.setFillColor(coloreContornoAR.withAlphaComponent(0.22).cgColor)
+            let percorso = CGMutablePath()
+            percorso.addLines(between: puntiSchermo)
+            percorso.closeSubpath()
+            cg.addPath(percorso)
+            cg.drawPath(using: .fillStroke)
+
+            for (i, punto) in puntiSchermo.enumerated() {
+                cg.setFillColor(coloreContornoAR.cgColor)
+                let raggio: CGFloat = 11
+                cg.fillEllipse(in: CGRect(x: punto.x - raggio, y: punto.y - raggio, width: raggio * 2, height: raggio * 2))
+                let numero = "\(i + 1)" as NSString
+                numero.draw(
+                    at: CGPoint(x: punto.x - 4, y: punto.y - 8),
+                    withAttributes: [.font: UIFont.boldSystemFont(ofSize: 15), .foregroundColor: UIColor.white]
+                )
+            }
+
+            // Banda scura in basso con le quote, leggibile su qualunque sfondo.
+            let testo = String(
+                format: "L = %.0f mm    H = %.0f mm    Superficie = %.2f m²\n%@ · %@",
+                larghezzaM * 1000, altezzaM * 1000, superficieM2,
+                attendibilitaComplessiva().capitalized, identificatoreDispositivo()
+            )
+            let bandaAltezza: CGFloat = 76
+            let bandaRect = CGRect(x: 0, y: viewportSize.height - bandaAltezza, width: viewportSize.width, height: bandaAltezza)
+            cg.setFillColor(UIColor.black.withAlphaComponent(0.62).cgColor)
+            cg.fill(bandaRect)
+
+            let paragrafo = NSMutableParagraphStyle()
+            paragrafo.alignment = .center
+            (testo as NSString).draw(
+                in: bandaRect.insetBy(dx: 12, dy: 10),
+                withAttributes: [
+                    .font: UIFont.boldSystemFont(ofSize: 17),
+                    .foregroundColor: UIColor.white,
+                    .paragraphStyle: paragrafo,
+                ]
+            )
+        }
+        let dati = immagineFinale.jpegData(compressionQuality: 0.7)
+        if let dati = dati {
+            print("📷 creaFotoConMisure: JPEG generato, \(dati.count / 1024) KB, \(Int(viewportSize.width))×\(Int(viewportSize.height))")
         } else {
-            bottoneParallelo.setTitle("🔓 Parallelismo: OFF", for: .normal)
-            bottoneParallelo.setTitleColor(.white, for: .normal)
-            bottoneParallelo.backgroundColor = UIColor.white.withAlphaComponent(0.18)
+            print("⚠️ creaFotoConMisure: jpegData ha restituito nil")
         }
-    }
-
-    /// Indice del vertice "abbinato" sullo stesso lato: 0=alto-sx/1=alto-dx
-    /// formano il lato alto, 3=basso-sx/2=basso-dx formano il lato basso.
-    private func indicePartnerParallelo(_ indice: Int) -> Int? {
-        switch indice {
-        case 0: return 1
-        case 1: return 0
-        case 2: return 3
-        case 3: return 2
-        default: return nil
-        }
-    }
-
-    /// Trasla rigidamente un vertice (stessa direzione e distanza del
-    /// trascinamento appena fatto sul suo abbinato), senza ricampionare la
-    /// depth map: non è una nuova misura, è solo "seguire" il lato in blocco.
-    private func traslaPunto(_ indice: Int, delta: SCNVector3) {
-        guard indice < punti.count else { return }
-        let posizioneAttuale = punti[indice].posizione
-        let nuovaPosizione = SCNVector3(
-            posizioneAttuale.x + delta.x,
-            posizioneAttuale.y + delta.y,
-            posizioneAttuale.z + delta.z
-        )
-        let nodoEsistente = punti[indice].nodo
-        nodoEsistente.position = nuovaPosizione
-        punti[indice].posizione = nuovaPosizione
-        ridisegnaLineeECalcola()
-    }
-
-    /// Lato basso vincolato al lato alto: le finestre sono quasi sempre a
-    /// squadro, quindi una volta sistemato il lato alto (2 vertici) il lato
-    /// basso serve solo per dire "quanto è alta" la finestra — orizzontalmente
-    /// e in profondità resta sempre allineato al vertice alto corrispondente.
-    /// Risultato: i 2 angoli in basso restano sempre a 90° e paralleli al lato
-    /// alto, indipendentemente da dove si tocca esattamente con il dito.
-    private func aggiornaLatoBassoVincolatoAllAlto(indiceTrascinato: Int, misurato: PuntoMisurato) {
-        guard punti.count == 4, indiceTrascinato == 2 || indiceTrascinato == 3 else { return }
-
-        let altoSx = simd_float3(punti[0].nodo.position.x, punti[0].nodo.position.y, punti[0].nodo.position.z)
-        let altoDx = simd_float3(punti[1].nodo.position.x, punti[1].nodo.position.y, punti[1].nodo.position.z)
-        let latoAlto = altoDx - altoSx
-        guard simd_length(latoAlto) > 0.0001 else { return }
-        let direzioneAlto = simd_normalize(latoAlto)
-
-        // Direzione "verso il basso" ortogonalizzata rispetto al lato alto
-        // (garantisce i 90° esatti), partendo dal basso reale del mondo.
-        let bassoMondo = simd_float3(0, -1, 0)
-        var giu = bassoMondo - direzioneAlto * simd_dot(bassoMondo, direzioneAlto)
-        if simd_length(giu) < 0.0001 { giu = simd_float3(0, -1, 0) } // caso limite: lato alto verticale
-        giu = simd_normalize(giu)
-
-        let puntoTrascinato = simd_float3(misurato.posizione.x, misurato.posizione.y, misurato.posizione.z)
-        let altoDiRiferimento = indiceTrascinato == 2 ? altoDx : altoSx
-        // Altezza = quanto in basso è stato trascinato il dito rispetto al
-        // proprio vertice alto, proiettato sulla direzione "giù": è l'unico
-        // grado di libertà che l'operatore controlla per il lato basso.
-        let altezza = max(0, simd_dot(puntoTrascinato - altoDiRiferimento, giu))
-
-        let nuovoBassoSxV = altoSx + giu * altezza
-        let nuovoBassoDxV = altoDx + giu * altezza
-        let nuovoBassoSx = SCNVector3(nuovoBassoSxV.x, nuovoBassoSxV.y, nuovoBassoSxV.z)
-        let nuovoBassoDx = SCNVector3(nuovoBassoDxV.x, nuovoBassoDxV.y, nuovoBassoDxV.z)
-
-        // Il vertice effettivamente toccato prende anche i metadati della
-        // nuova lettura (confidenza/metodo/profondità); l'altro angolo basso
-        // lo segue solo in posizione, per restare parallelo al lato alto.
-        if indiceTrascinato == 3 {
-            aggiornaMetadatiEPosizione(3, misurato: misurato, posizione: nuovoBassoSx)
-            aggiornaSoloPosizione(2, nuovoBassoDx)
-        } else {
-            aggiornaMetadatiEPosizione(2, misurato: misurato, posizione: nuovoBassoDx)
-            aggiornaSoloPosizione(3, nuovoBassoSx)
-        }
-        ridisegnaLineeECalcola()
-    }
-
-    private func aggiornaMetadatiEPosizione(_ indice: Int, misurato: PuntoMisurato, posizione: SCNVector3) {
-        guard indice < punti.count else { return }
-        let nodo = punti[indice].nodo
-        nodo.position = posizione
-        nodo.childNodes.forEach { $0.removeFromParentNode() }
-        var m = misurato
-        m.posizione = posizione
-        aggiornaAspettoNodo(nodo, per: m)
-        punti[indice].posizione = posizione
-        punti[indice].profonditaM = misurato.profonditaM
-        punti[indice].confidence = misurato.confidence
-        punti[indice].metodo = misurato.metodo
-    }
-
-    private func aggiornaSoloPosizione(_ indice: Int, _ posizione: SCNVector3) {
-        guard indice < punti.count else { return }
-        punti[indice].nodo.position = posizione
-        punti[indice].posizione = posizione
+        return dati
     }
 
     @objc private func conferma() {
@@ -902,7 +1505,7 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
             ]
         }
 
-        let risultato: [String: Any] = [
+        var risultato: [String: Any] = [
             "larghezza": (larghezzaCm * 10).rounded() / 10,     // cm, un decimale
             "altezza": (altezzaCm * 10).rounded() / 10,
             "superficie": (superficieM2 * 100).rounded() / 100,  // m²
@@ -912,6 +1515,16 @@ final class VistaMisuraLidar: UIViewController, ARSCNViewDelegate, ARSessionDele
             "confermataOperatore": true,
             "punti": puntiJson,
         ]
+
+        // Foto della misurazione con le quote scritte sopra: comoda
+        // documentazione visiva da allegare al serramento, in aggiunta ai
+        // valori numerici già calcolati sopra (non ricalcolati, solo passati
+        // come testo). Se la generazione fallisce per qualunque motivo si
+        // procede comunque con la sola misura numerica: non blocca la conferma.
+        if let datiFoto = creaFotoConMisure(larghezzaM: larghezzaM, altezzaM: altezzaM, superficieM2: Float(superficieM2)) {
+            risultato["fotoConMisureBase64"] = datiFoto.base64EncodedString()
+        }
+
         alCompletamento?(risultato)
     }
 

@@ -928,6 +928,16 @@ async function pluginLidarDisponibile() {
   }
 })();
 
+// Converte la stringa base64 (JPEG) ricevuta dal plugin nativo in un File,
+// utilizzabile ovunque nel form esattamente come un file scelto/scattato
+// dall'utente (stesso oggetto che produce <input type="file">).
+function fileDaBase64Jpeg(base64, nomeFile) {
+  const binario = atob(base64);
+  const byte = new Uint8Array(binario.length);
+  for (let i = 0; i < binario.length; i++) byte[i] = binario.charCodeAt(i);
+  return new File([byte], nomeFile, { type: 'image/jpeg' });
+}
+
 $('#btn-misura-lidar').addEventListener('click', async () => {
   const plugin = window.Capacitor?.Plugins?.MisuraLidar;
   if (!plugin) return;
@@ -947,7 +957,32 @@ $('#btn-misura-lidar').addEventListener('click', async () => {
     nota.textContent =
       `📐 Misura LiDAR — ${risultato.dispositivo} · attendibilità ${risultato.attendibilita} · ` +
       `MISURA INDICATIVA — verifica prima di salvare.`;
-    mostraToast('Misura LiDAR acquisita, verifica i valori prima di salvare');
+    // La schermata LiDAR genera anche una foto con le quote scritte sopra
+    // (rettangolo + L/H/superficie disegnati sul fermo immagine): la usiamo
+    // come foto del serramento, con lo stesso meccanismo (DataTransfer su
+    // #input-foto) già usato per lo scatto dalla fotocamera del sito, così
+    // l'operatore non deve più scattare una foto separata a mano.
+    let notaFoto = '';
+    if (risultato.fotoConMisureBase64) {
+      try {
+        const file = fileDaBase64Jpeg(risultato.fotoConMisureBase64, `misura-lidar-${Date.now()}.jpg`);
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        inputFoto.files = dt.files;
+        anteprimaFoto.src = URL.createObjectURL(file);
+        anteprimaFoto.hidden = false;
+      } catch (errFoto) {
+        console.warn('Foto con misure non applicata:', errFoto);
+        notaFoto = ' (foto non applicata: ' + errFoto.message + ')';
+      }
+    } else {
+      // Segnale visibile (non solo in console) se il nativo non ha generato
+      // la foto: senza questo, un fallimento silenzioso lato Swift passava
+      // inosservato e sembrava "la foto non funziona" senza indizi.
+      console.warn('Nessuna fotoConMisureBase64 nel risultato LiDAR:', risultato);
+      notaFoto = ' (foto con quote non generata)';
+    }
+    mostraToast('Misura LiDAR acquisita, verifica i valori prima di salvare' + notaFoto);
   } catch (e) {
     mostraToast('Misura LiDAR non riuscita: ' + e.message);
   } finally {
