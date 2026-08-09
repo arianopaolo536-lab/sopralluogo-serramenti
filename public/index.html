@@ -344,8 +344,12 @@
             <input type="file" name="foto" id="input-foto" accept="image/*" capture="environment">
             <button type="button" class="btn btn-secondary" id="btn-scatta-foto">📷 Scatta foto</button>
           </div>
-          <img id="anteprima-foto" class="anteprima-foto" hidden>
         </label>
+        <!-- FUORI dal <label> di cui sopra apposta: dentro, qualunque tocco
+             sull'immagine veniva interpretato dal browser come un tocco sul
+             controllo associato (l'input file), riaprendo la fotocamera
+             invece di mostrare l'anteprima ingrandita. -->
+        <img id="anteprima-foto" class="anteprima-foto" hidden alt="Anteprima foto serramento (tocca per ingrandire)">
         <!-- Visibile solo dentro l'app nativa iOS, su dispositivi con LiDAR:
              il JS la mostra via feature-detection, nessun impatto sulla versione browser. -->
         <button type="button" class="btn btn-secondary" id="btn-misura-lidar" hidden>📐 Misura con LiDAR</button>
@@ -385,6 +389,11 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <div id="modale-anteprima-foto" class="modale-lightbox" hidden>
+    <button type="button" class="btn-chiudi-lightbox" id="btn-chiudi-anteprima-foto">✕</button>
+    <img id="img-anteprima-foto-grande" alt="Foto ingrandita">
   </div>
 
   <div id="toast" class="toast" hidden></div>

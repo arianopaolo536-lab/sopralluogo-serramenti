@@ -1004,6 +1004,29 @@ let richiestaCameraAttiva = false;
 let callbackFotoCatturata = null;
 let modalitaMultiScatto = false;
 
+// ---------- Anteprima ingrandita (lightbox) ----------
+// L'anteprima è ora FUORI dal <label>Foto...</label> apposta (vedi index.html):
+// prima un tocco sulla miniatura veniva interpretato dal browser come tocco
+// sul controllo associato (l'input file), riaprendo sempre la fotocamera
+// invece di ingrandire l'immagine.
+const modaleAnteprimaFoto = $('#modale-anteprima-foto');
+const imgAnteprimaFotoGrande = $('#img-anteprima-foto-grande');
+
+function apriAnteprimaIngrandita(src) {
+  if (!src) return;
+  imgAnteprimaFotoGrande.src = src;
+  modaleAnteprimaFoto.hidden = false;
+}
+function chiudiAnteprimaIngrandita() {
+  modaleAnteprimaFoto.hidden = true;
+  imgAnteprimaFotoGrande.src = '';
+}
+anteprimaFoto.addEventListener('click', () => apriAnteprimaIngrandita(anteprimaFoto.src));
+$('#btn-chiudi-anteprima-foto').addEventListener('click', chiudiAnteprimaIngrandita);
+modaleAnteprimaFoto.addEventListener('click', (e) => {
+  if (e.target === modaleAnteprimaFoto) chiudiAnteprimaIngrandita();
+});
+
 inputFoto.addEventListener('change', () => {
   if (inputFoto.files && inputFoto.files[0]) {
     anteprimaFoto.src = URL.createObjectURL(inputFoto.files[0]);

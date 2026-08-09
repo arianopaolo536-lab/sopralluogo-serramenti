@@ -390,6 +390,42 @@ input:focus, select:focus, textarea:focus {
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+/* Lightbox: anteprima ingrandita della foto del serramento (tocco sulla
+   miniatura in .anteprima-foto), separata dalla modale fotocamera perché
+   qui si guarda soltanto, non si scatta/sceglie nulla. */
+.modale-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  background: rgba(0,0,0,.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.modale-lightbox[hidden] { display: none; }
+.modale-lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.btn-chiudi-lightbox {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255,255,255,.15);
+  color: #fff;
+  font-size: 1.1rem;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 /* Modale fotocamera */
