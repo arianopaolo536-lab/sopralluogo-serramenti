@@ -286,8 +286,23 @@ async function caricaElenco() {
           <span class="badge-modalita ${im.classe}">${im.etichetta}</span>
           ${escapeHtml(s.cliente_nome)} · ${escapeHtml(s.indirizzo)} · ${s.num_serramenti} serrament${s.num_serramenti === 1 ? 'o' : 'i'}
         </div>
+        <div><button type="button" class="btn btn-danger btn-elimina-sopralluogo" data-id="${s.id}">Elimina</button></div>
       `;
-      el.addEventListener('click', () => apriDettaglio(s.id));
+      el.addEventListener('click', (ev) => {
+        if (ev.target.closest('.btn-elimina-sopralluogo')) return;
+        apriDettaglio(s.id);
+      });
+      el.querySelector('.btn-elimina-sopralluogo').addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        if (!confirm(`Eliminare definitivamente il sopralluogo "${titoloVisivo}"? L'operazione non è reversibile.`)) return;
+        try {
+          await api(`/sopralluoghi/${s.id}`, { method: 'DELETE' });
+          mostraToast('Sopralluogo eliminato');
+          caricaElenco();
+        } catch (err) {
+          mostraToast('Errore: ' + err.message);
+        }
+      });
       lista.appendChild(el);
     }
   } catch (e) {
