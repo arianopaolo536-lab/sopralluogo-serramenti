@@ -1,16 +1,20 @@
 :root {
   --primary: #1d6f5c;
   --primary-dark: #14503f;
+  /* Verde più chiaro, per il testo/le icone su sfondo scuro: --primary-dark
+     (pensato per testo su sfondi CHIARI) sparirebbe quasi del tutto su una
+     card scura — stessa famiglia di colore della schermata LiDAR nativa. */
+  --primary-light: #4fcf9c;
   --accent: #c0392b;
-  --bg: #eef6f1;
-  --card-bg: rgba(255, 255, 255, 0.6);
-  --border: rgba(255, 255, 255, 0.55);
-  --border-solido: #dfe6e2;
-  --text: #1c2624;
-  --muted: #5c6b66;
-  --danger: #b3392c;
+  --bg: #0b1319;
+  --card-bg: rgba(22, 32, 42, 0.72);
+  --border: rgba(255, 255, 255, 0.12);
+  --border-solido: #263241;
+  --text: #f2f5f4;
+  --muted: #9aa8a4;
+  --danger: #ef5b4a;
   --sfumatura-vetro: blur(16px);
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -20,13 +24,15 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text);
   min-height: 100vh;
-  /* Sfondo "a serramento": illustrazione architettonica di infissi molto tenue,
-     con due aloni di colore ispirati al verde/rosso del brand sopra. */
-  background-color: #f7f8f6;
+  /* Stesso concept "a serramento" di prima, ma per il tema scuro/premium
+     coerente con la schermata LiDAR nativa: base blu notte/antracite, con
+     due aloni verde/rosso brand molto attenuati e l'illustrazione di sfondo
+     scurita pesantemente (texture appena percettibile, non protagonista). */
+  background-color: var(--bg);
   background-image:
-    radial-gradient(circle at 12% 8%, rgba(29,111,92,.16), transparent 42%),
-    radial-gradient(circle at 92% 12%, rgba(192,57,43,.12), transparent 38%),
-    linear-gradient(160deg, rgba(238,246,241,.35) 0%, rgba(245,246,244,.25) 45%, rgba(253,241,238,.35) 100%),
+    radial-gradient(circle at 12% 8%, rgba(29,111,92,.22), transparent 42%),
+    radial-gradient(circle at 92% 12%, rgba(192,57,43,.14), transparent 38%),
+    linear-gradient(160deg, rgba(6,11,15,.72) 0%, rgba(9,14,19,.8) 45%, rgba(14,9,9,.72) 100%),
     url('assets/sfondo-serramenti.jpg');
   background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
   background-size: cover, cover, cover, cover;
@@ -43,12 +49,15 @@ body {
   align-items: center;
   gap: 8px;
   padding: 14px 16px;
-  background: linear-gradient(120deg, rgba(29,111,92,.92), rgba(20,80,66,.92));
+  /* Blu notte/antracite, come l'header nativo della schermata LiDAR, invece
+     del verde brand pieno: il verde resta come accento (badge, pulsanti). */
+  background: linear-gradient(120deg, rgba(10,17,23,.97), rgba(15,24,32,.97));
+  border-bottom: 1px solid rgba(255,255,255,.08);
   backdrop-filter: var(--sfumatura-vetro);
   -webkit-backdrop-filter: var(--sfumatura-vetro);
   color: white;
   flex-wrap: wrap;
-  box-shadow: 0 4px 20px rgba(20,50,40,.12);
+  box-shadow: 0 4px 20px rgba(0,0,0,.4);
 }
 
 .app-header h1 {
@@ -57,8 +66,8 @@ body {
 }
 
 .badge-in-coda {
-  background: rgba(192,140,20,.16) !important;
-  color: #8a6d1f !important;
+  background: rgba(192,140,20,.22) !important;
+  color: #e8b94a !important;
   margin-left: 6px;
 }
 
@@ -85,13 +94,13 @@ body {
   /* Sfondo verde scuro (non bianco): la "I" del logo è bianca con solo un
      filo di contorno grigio chiaro, su sfondo bianco/quasi bianco sparisce
      quasi del tutto. Sul verde scuro risalta come si deve, insieme a Q e D. */
-  background: rgba(15,58,47,.55);
+  background: rgba(15,58,47,.75);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border: 1px solid rgba(255,255,255,.18);
   border-radius: 10px;
   padding: 5px 8px;
-  box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  box-shadow: 0 4px 14px rgba(0,0,0,.3);
 }
 .logo-qid {
   height: 24px;
@@ -114,11 +123,11 @@ main {
   backdrop-filter: var(--sfumatura-vetro);
   -webkit-backdrop-filter: var(--sfumatura-vetro);
   border: 1px solid var(--border);
-  border-top: 3px solid rgba(29,111,92,.35);
+  border-top: 3px solid rgba(79,207,156,.45);
   border-radius: 14px;
   padding: 16px;
   margin-bottom: 12px;
-  box-shadow: 0 8px 28px rgba(20,50,40,.07);
+  box-shadow: 0 8px 28px rgba(0,0,0,.35);
 }
 
 .lista { display: flex; flex-direction: column; gap: 10px; }
@@ -132,9 +141,9 @@ main {
   padding: 14px;
   cursor: pointer;
   transition: box-shadow .15s ease, transform .15s ease;
-  box-shadow: 0 6px 20px rgba(20,50,40,.06);
+  box-shadow: 0 6px 20px rgba(0,0,0,.3);
 }
-.item-sopralluogo:hover { box-shadow: 0 8px 26px rgba(20,50,40,.12); transform: translateY(-1px); }
+.item-sopralluogo:hover { box-shadow: 0 8px 26px rgba(0,0,0,.45); transform: translateY(-1px); }
 .item-sopralluogo .riga-titolo {
   display: flex;
   justify-content: space-between;
@@ -155,7 +164,7 @@ main {
   padding: 12px;
   display: flex;
   gap: 12px;
-  box-shadow: 0 6px 20px rgba(20,50,40,.06);
+  box-shadow: 0 6px 20px rgba(0,0,0,.3);
 }
 .item-serramento img {
   width: 84px;
@@ -163,7 +172,7 @@ main {
   object-fit: cover;
   border-radius: 8px;
   flex-shrink: 0;
-  background: #eee;
+  background: #1c2630;
 }
 .item-serramento .info { flex: 1; }
 .item-serramento .titolo { font-weight: 600; }
@@ -173,8 +182,8 @@ main {
   font-size: .75rem;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(29,111,92,.12);
-  color: var(--primary-dark);
+  background: rgba(29,111,92,.2);
+  color: var(--primary-light);
   margin-top: 6px;
 }
 
@@ -203,7 +212,7 @@ form.card { display: flex; flex-direction: column; gap: 12px; }
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: rgba(255,255,255,.5);
+  background: rgba(255,255,255,.05);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 2px solid var(--border);
@@ -221,15 +230,15 @@ form.card { display: flex; flex-direction: column; gap: 12px; }
   width: 26px;
   height: 26px;
   border-radius: 8px;
-  background: rgba(29,111,92,.12);
-  color: var(--primary-dark);
+  background: rgba(29,111,92,.18);
+  color: var(--primary-light);
   font-weight: 700;
   font-size: .82rem;
   margin-bottom: 4px;
 }
 .gate-opzione input:checked + .gate-opzione-corpo {
   border-color: var(--primary);
-  background: rgba(29,111,92,.1);
+  background: rgba(29,111,92,.16);
 }
 .gate-opzione input:checked + .gate-opzione-corpo .gate-opzione-lettera {
   background: var(--primary);
@@ -252,9 +261,9 @@ form.card { display: flex; flex-direction: column; gap: 12px; }
   vertical-align: middle;
 }
 .item-sopralluogo .badge-modalita { margin-right: 6px; }
-.modalita-preventivazione { background: rgba(59,130,180,.14); color: #2b6a8a; }
-.modalita-esecutivo { background: rgba(29,111,92,.14); color: var(--primary-dark); }
-.modalita-posa { background: rgba(192,57,43,.14); color: var(--danger); }
+.modalita-preventivazione { background: rgba(59,130,180,.2); color: #7ec1e8; }
+.modalita-esecutivo { background: rgba(29,111,92,.2); color: var(--primary-light); }
+.modalita-posa { background: rgba(192,57,43,.2); color: var(--danger); }
 
 label {
   display: flex;
@@ -267,19 +276,20 @@ label {
 input, select, textarea {
   font-size: 1rem;
   padding: 10px;
-  border: 1px solid rgba(255,255,255,.7);
+  border: 1px solid rgba(255,255,255,.14);
   border-radius: 8px;
   font-family: inherit;
   color: var(--text);
-  background: rgba(255,255,255,.72);
+  background: rgba(255,255,255,.06);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   transition: background .15s ease, border-color .15s ease;
 }
+input::placeholder, textarea::placeholder { color: rgba(242,245,244,.4); }
 input:focus, select:focus, textarea:focus {
   outline: none;
-  background: rgba(255,255,255,.92);
-  border-color: rgba(29,111,92,.45);
+  background: rgba(255,255,255,.1);
+  border-color: rgba(79,207,156,.55);
 }
 
 .riga-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -305,13 +315,13 @@ input:focus, select:focus, textarea:focus {
 }
 .btn-primary:hover { background: var(--primary-dark); }
 .btn-secondary {
-  background: rgba(255,255,255,.55);
+  background: rgba(255,255,255,.08);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border: 1px solid var(--border);
   color: var(--text);
 }
-.btn-link { background: none; color: var(--primary-dark); padding: 8px 0; font-weight: 600; }
+.btn-link { background: none; color: var(--primary-light); padding: 8px 0; font-weight: 600; }
 .btn-danger { background: none; color: var(--danger); font-weight: 600; padding: 4px 8px; }
 
 .vuoto { color: var(--muted); text-align: center; margin-top: 32px; }
@@ -357,7 +367,7 @@ input:focus, select:focus, textarea:focus {
 .btn-mic {
   flex-shrink: 0;
   border: 1px solid var(--border);
-  background: rgba(255,255,255,.65);
+  background: rgba(255,255,255,.08);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border-radius: 8px;
@@ -521,16 +531,16 @@ input:focus, select:focus, textarea:focus {
 }
 .badge-salvato {
   font-size: .8rem;
-  color: var(--primary-dark);
-  background: rgba(29,111,92,.12);
+  color: var(--primary-light);
+  background: rgba(29,111,92,.18);
   backdrop-filter: blur(4px);
   padding: 4px 10px;
   border-radius: 999px;
   white-space: nowrap;
 }
 .badge-salvato.salvataggio {
-  color: #8a6d1f;
-  background: rgba(251,241,216,.85);
+  color: #e8c468;
+  background: rgba(251,241,216,.14);
 }
 .campo-titolo {
   width: 100%;
@@ -546,7 +556,7 @@ input:focus, select:focus, textarea:focus {
 }
 .campo-titolo:focus {
   outline: none;
-  background: rgba(255,255,255,.55);
+  background: rgba(255,255,255,.08);
 }
 
 .statistiche {
@@ -556,7 +566,7 @@ input:focus, select:focus, textarea:focus {
   margin: 12px 0;
 }
 .statistica {
-  background: rgba(255,255,255,.5);
+  background: rgba(255,255,255,.05);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--border);
@@ -568,7 +578,7 @@ input:focus, select:focus, textarea:focus {
   display: block;
   font-size: 1.2rem;
   font-weight: 700;
-  color: var(--primary-dark);
+  color: var(--primary-light);
 }
 .statistica-etichetta {
   display: block;
@@ -591,7 +601,7 @@ input:focus, select:focus, textarea:focus {
 }
 .tab-btn {
   border: 1px solid var(--border);
-  background: rgba(255,255,255,.32);
+  background: rgba(255,255,255,.04);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   color: var(--muted);
@@ -605,7 +615,7 @@ input:focus, select:focus, textarea:focus {
   transition: background .15s ease;
 }
 .tab-btn.attivo {
-  background: rgba(255,255,255,.8);
+  background: rgba(255,255,255,.1);
   color: var(--text);
   border-bottom: 3px solid var(--primary);
 }
@@ -632,7 +642,7 @@ input:focus, select:focus, textarea:focus {
 }
 .btn-detta {
   border: 1px solid var(--border);
-  background: rgba(255,255,255,.55);
+  background: rgba(255,255,255,.07);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   border-radius: 999px;
@@ -660,7 +670,7 @@ input:focus, select:focus, textarea:focus {
   border-radius: 14px;
   margin-bottom: 12px;
   overflow: hidden;
-  box-shadow: 0 6px 20px rgba(20,50,40,.06);
+  box-shadow: 0 6px 20px rgba(0,0,0,.3);
 }
 .sezione-header {
   width: 100%;
@@ -678,8 +688,8 @@ input:focus, select:focus, textarea:focus {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: linear-gradient(135deg, rgba(29,111,92,.18), rgba(29,111,92,.08));
-  color: var(--primary-dark);
+  background: linear-gradient(135deg, rgba(29,111,92,.28), rgba(29,111,92,.14));
+  color: var(--primary-light);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -714,7 +724,7 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
-  background: rgba(255,255,255,.6);
+  background: rgba(255,255,255,.05);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
@@ -765,20 +775,20 @@ input:focus, select:focus, textarea:focus {
   letter-spacing: .04em;
   font-size: .72rem;
   font-weight: 700;
-  color: #b3592c;
+  color: #e58a52;
 }
 .vuoto-sottotitolo { color: var(--muted); font-size: .88rem; margin: 0; }
 .campo-ricerca { margin-bottom: 14px; }
 
 .stato-vuoto {
   background:
-    linear-gradient(rgba(255,255,255,.72), rgba(255,255,255,.72)),
+    linear-gradient(rgba(8,13,18,.85), rgba(8,13,18,.85)),
     url('assets/finestra-dettaglio.jpg');
   background-size: cover;
   background-position: center;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border: 2px dashed rgba(29,111,92,.3);
+  border: 2px dashed rgba(79,207,156,.35);
   border-radius: 14px;
   padding: 36px 20px;
   text-align: center;
@@ -787,8 +797,8 @@ input:focus, select:focus, textarea:focus {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: rgba(29,111,92,.12);
-  color: var(--primary-dark);
+  background: rgba(29,111,92,.18);
+  color: var(--primary-light);
   font-size: 1.6rem;
   display: flex;
   align-items: center;
@@ -800,20 +810,20 @@ input:focus, select:focus, textarea:focus {
 
 /* ===== Modale form serramento ===== */
 .modale-form {
-  background: rgba(255,255,255,.85);
+  background: rgba(15,22,30,.94);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255,255,255,.6);
+  border: 1px solid rgba(255,255,255,.12);
   max-width: 560px;
   max-height: 90vh;
   overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0,0,0,.25);
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
 }
 .modale-form-header {
   position: sticky;
   top: 0;
   background:
-    linear-gradient(rgba(255,255,255,.82), rgba(255,255,255,.82)),
+    linear-gradient(rgba(9,14,19,.9), rgba(9,14,19,.9)),
     url('assets/finestra-dettaglio.jpg');
   background-size: cover;
   background-position: center 25%;
@@ -826,11 +836,11 @@ input:focus, select:focus, textarea:focus {
   border-bottom: 1px solid var(--border);
   z-index: 1;
 }
-.modale-form-header h3 { margin: 0; }
+.modale-form-header h3 { margin: 0; color: var(--text); }
 .btn-chiudi-modale {
   border: none;
-  background: rgba(29,111,92,.12);
-  color: var(--primary-dark);
+  background: rgba(29,111,92,.18);
+  color: var(--primary-light);
   border-radius: 50%;
   width: 32px;
   height: 32px;
@@ -857,7 +867,7 @@ input:focus, select:focus, textarea:focus {
 .riga-pellicola { max-width: 220px; margin-top: 8px; }
 .tabella-riepilogo-wrap {
   overflow-x: auto;
-  background: rgba(255,255,255,.5);
+  background: rgba(255,255,255,.04);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid var(--border);

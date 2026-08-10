@@ -1,7 +1,7 @@
 // Service worker per uso offline-first.
 // Incrementare CACHE_VERSION ad ogni deploy che tocca gli asset statici,
 // così i client scaricano la nuova versione invece di restare bloccati sulla cache vecchia.
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_SHELL = `sopralluogo-shell-${CACHE_VERSION}`;
 const CACHE_API = `sopralluogo-api-${CACHE_VERSION}`;
 
